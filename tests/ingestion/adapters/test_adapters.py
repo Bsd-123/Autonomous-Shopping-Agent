@@ -1,5 +1,6 @@
 """Adapter tests run against sample files cut from each chain's real data."""
 
+import shutil
 from decimal import Decimal
 from pathlib import Path
 
@@ -142,3 +143,41 @@ class TestYeshHesed:
         ]
         bnei_brak = stores.filter(city="6100")["store_id"].to_list()
         assert sorted(bnei_brak) == ["yesh_hesed:219", "yesh_hesed:295", "yesh_hesed:611"]
+
+    def test_prices_keep_only_rows_of_yesh_hesed_stores(self, tmp_path):
+        # Constructed price file in Shufersal's layout, paired with the real
+        # store file. Store 681 belongs to another Shufersal sub-chain; store
+        # 611 is a Yesh Hesed branch. Shufersal timestamps carry no milliseconds.
+        folder = tmp_path / "shufersal"
+        folder.mkdir()
+        shutil.copy(RAW / "shufersal" / "store_file_shufersal.csv", folder)
+        header = (
+            "found_folder,file_name,chainid,subchainid,storeid,bikoretno,priceupdatetime,"
+            "itemcode,lastsaledatetime,itemtype,itemname,manufacturename,manufacturecountry,"
+            "manufactureitemdescription,unitqty,quantity,unitofmeasure,bisweighted,"
+            "qtyinpackage,itemprice,unitofmeasureprice,allowdiscount,itemstatus"
+        )
+        rows = [
+            "app_data/dumps/Shufersal,Price7290027600007-005-681-20261114-010000.xml,"
+            "7290027600007,005,681,9,2026-11-14T00:10:00,3574661098531,2026-11-13T11:29:55,1,"
+            "תח.גוף ניוטרוגינה מ400,ש.שסטוביץ,GR,תח.גוף ניוטרוגינה מ400,מיליליטר,400.00,"
+            "100 מיליליטר,0,1,37.90,9.48,1,1",
+            ",Price7290027600007-006-611-20261114-010000.xml,,006,611,,,3838824438696,"
+            "2026-11-13T11:00:09,,קרם סופרם-צבע לשיער-6-0,סלובניה,SI,קרם סופרם-צבע לשיער-6-0,"
+            "יחידות,1.00,יחידות,,,49.90,49.90,,",
+            ",,,,,,,7290000000015,2026-11-13T12:00:00,,פריט לדוגמה,'',IL,פריט לדוגמה,"
+            ",,,,,12.50,12.50,,",
+        ]
+        (folder / "price_file_shufersal.csv").write_text(
+            "\n".join([header, *rows]) + "\n", encoding="utf-8"
+        )
+
+        prices = YeshHesedAdapter().read_prices(tmp_path)
+
+        assert_price_layout(prices, "yesh_hesed")
+        assert prices["store_id"].to_list() == ["yesh_hesed:611", "yesh_hesed:611"]
+        assert prices["item_code"].to_list() == ["3838824438696", "7290000000015"]
+        assert prices["price"].to_list() == [Decimal("49.90"), Decimal("12.50")]
+        assert prices["manufacturer"].to_list() == ["סלובניה", None]
+        assert prices["qty_in_package"].to_list() == [1.0, 1.0]
+        assert prices["source_timestamp"].null_count() == 0
