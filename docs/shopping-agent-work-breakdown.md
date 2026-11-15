@@ -26,7 +26,7 @@ No production code. The outcome is a go/no-go on the data source and a written s
 - Check the Kaggle dataset's update cadence and completeness.
 - Check its licence and terms of use.
 - Confirm whether promotion files and store files are included.
-- Confirm the dataset contains Yesh Hesed, Osher Ad and Netiv HaHesed, with their Bnei Brak branches, and note how each chain is identified in the files.
+- Confirm the dataset contains Yesh Hesed, Osher Ad and Maayan 2000, with their Bnei Brak branches, and note how each chain is identified in the files.
 - Confirm whether the source files carry a category column.
 - Run a half-day spike on one or two chains' official price files and compare the effort with the Kaggle CSVs.
 - Measure the dataset's real lag, as input for tuning the 7-day staleness cutoff [4.2].
@@ -45,13 +45,13 @@ No production code. The outcome is a go/no-go on the data source and a written s
 
 ## Phase 1 — Core MVP
 
-Three chains in one city: Yesh Hesed, Osher Ad and Netiv HaHesed, in Bnei Brak. Focus: data reliability, matching accuracy, mathematical correctness.
+Three chains in one city: Yesh Hesed, Osher Ad and Maayan 2000, in Bnei Brak. Focus: data reliability, matching accuracy, mathematical correctness.
 
 ### DATA
 
 **Scope:** turn the daily Kaggle CSVs into a validated, versioned canonical dataset. Input: Kaggle CSVs, the SEM profile file. Output: canonical Parquet (`products`, `prices`, `stores`, `ingestion_runs`) for SRCH, DEC and PLAT.
 
-- Build three per-chain adapters: Yesh Hesed, Osher Ad and Netiv HaHesed [4].
+- Build three per-chain adapters: Yesh Hesed, Osher Ad and Maayan 2000 [4].
 - Filter stores, and the prices that belong to them, to the Bnei Brak branches of the three chains.
 - Implement the canonical schema, including freshness columns and `price_flag` [4.1].
 - Build `product_key`: shared across chains only for codes with a valid barcode length and check digit, otherwise `chain:code` [4.1].
@@ -349,7 +349,7 @@ These five points were open in Version 3 of the architecture and are now decided
 
 | Decision | Phase | Summary |
 |---|---|---|
-| MVP scope | 1 | Bnei Brak, with three chains: Yesh Hesed, Osher Ad and Netiv HaHesed. Adapters, store filtering and geocoding overrides target these branches. |
+| MVP scope | 1 | Bnei Brak, with three chains: Yesh Hesed, Osher Ad and Maayan 2000. Adapters, store filtering and geocoding overrides target these branches. |
 | Profiles and evaluation set | 1 | 35 core category profiles. 150 labelled items: 60 profile staples, 40 non-profile items, 30 weighed or non-barcode items, 20 edge cases. SEM owns the profiles and the labelled cases; PLAT owns the CI harness. |
 | Substitution rules | 3 | Two tiers: exact equivalence, and near substitutes that relax one user-specified attribute while category defaults stay hard. Near substitutes are offered only when no exact match is listed in the store subset or every exact match fails the 1.5× overbuy rule. They appear in a separate row and need the user's confirmation. |
 | Hourly data cadence | 7 | Catalog, BM25 index and embedding matrix stay in the daily image. Only `prices.parquet` is refreshed hourly: GitHub Actions uploads it to R2, and the service downloads it to `/tmp` and atomically repoints DuckDB. |
