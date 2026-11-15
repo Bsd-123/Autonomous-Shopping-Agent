@@ -38,10 +38,11 @@ Every adapter returns two frames with the same columns and types for all chains,
 
 **Stores:** `chain`, `store_id`, `name`, `address`, `city`, `zipcode`, `source_timestamp`, `source_file`.
 
-**Prices:** `chain`, `store_id`, `item_code`, `name`, `manufacturer`, `is_weighed`, `quantity`, `unit`, `unit_of_measure`, `qty_in_package`, `price`, `source_timestamp`, `source_file`.
+**Prices:** `chain`, `store_id`, `item_code`, `name`, `manufacturer`, `is_weighed`, `quantity`, `unit`, `unit_of_measure`, `qty_in_package`, `price`, `price_updated_at`, `source_timestamp`, `source_file`.
 
 - `store_id` is `<chain>:<store number>`, with leading zeros removed, so it is unique across chains.
 - `city` is the raw value from the file, usually a Central Bureau of Statistics locality code (Bnei Brak is `6100`).
+- `source_timestamp` in the prices frame is when the chain published the price file, read from the file name. `price_updated_at` is the item's last price change as stated by the chain.
 - `price` is the shelf price in shekels as published. Conversion to integer agorot, cleaning, unit normalization and the canonical tables are later pipeline steps.
 - Adapters return every row found in the price files, including repeated listings of the same item; duplicates are resolved in the cleaning step.
 

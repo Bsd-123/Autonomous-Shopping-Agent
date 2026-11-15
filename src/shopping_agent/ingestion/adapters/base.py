@@ -75,6 +75,19 @@ def read_expanded(
     )
 
 
+def _file_published_at() -> pl.Expr:
+    """When the chain published the price file, read from its name.
+
+    Names end with a date and a time of four or six digits, for example
+    ``Price7290103152017-001-006-20261114-090012.xml``. The item's own
+    ``priceupdatetime`` is the last price change and can be years old, so it
+    says nothing about how fresh the listing is.
+    """
+    date = pl.col("file_name").str.extract(r"-(\d{8})-\d{4,6}(?:\.|$)", 1)
+    time = pl.col("file_name").str.extract(r"-\d{8}-(\d{4,6})(?:\.|$)", 1).str.pad_end(6, "0")
+    return (date + time).str.to_datetime("%Y%m%d%H%M%S", strict=False, time_unit="ms")
+
+
 class ChainAdapter:
     """Reads one chain's raw files and emits rows in the common layout."""
 
@@ -125,9 +138,10 @@ class ChainAdapter:
             unit_of_measure="unitofmeasure",
             qty_in_package=pl.col("qtyinpackage").cast(pl.Float64, strict=False),
             price=pl.col("itemprice").cast(pl.Decimal(12, 2), strict=False),
-            source_timestamp=pl.col("priceupdatetime").str.to_datetime(
+            price_updated_at=pl.col("priceupdatetime").str.to_datetime(
                 strict=False, time_unit="ms"
             ),
+            source_timestamp=_file_published_at(),
             source_file="file_name",
         ).cast(PRICE_SCHEMA)
 

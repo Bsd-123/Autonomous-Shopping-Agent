@@ -18,6 +18,7 @@ PRICE_SCHEMA: dict[str, pl.DataType] = {
     "unit_of_measure": pl.String(),
     "qty_in_package": pl.Float64(),
     "price": pl.Decimal(12, 2),
+    "price_updated_at": pl.Datetime("ms"),
     "source_timestamp": pl.Datetime("ms"),
     "source_file": pl.String(),
 }
