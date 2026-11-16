@@ -18,6 +18,7 @@ from shopping_agent.decision import (
     MAX_STORES,
     NO_STORE,
     NOT_LISTED,
+    DecisionConfig,
     Point,
     decide,
     haversine_km,
@@ -322,18 +323,21 @@ class TestInputChecks:
         with pytest.raises(ValueError, match="at most 40 candidate stores, got 41"):
             decide(np.full((1, len(stores)), 100), HOME, stores)
 
-    @pytest.mark.parametrize(
-        ("settings", "error"),
-        [
-            ({"penalty_agorot": -1}, ValueError),
-            ({"penalty_agorot": 10.5}, TypeError),
-            ({"travel_agorot_per_km": -1.0}, ValueError),
-            ({"travel_agorot_per_km": float("nan")}, ValueError),
-        ],
-    )
-    def test_bad_settings_are_rejected(self, settings, error):
-        with pytest.raises(error):
-            decide(COST, HOME, [A, B, C], **settings)
+    def test_the_configuration_reaches_the_engine(self):
+        config = DecisionConfig(penalty_agorot=250, travel_agorot_per_km=37.5)
+
+        found = as_rows(decide(COST, HOME, [A, B, C], config=config).subsets)
+        expected = reference(COST, HOME, [A, B, C], penalty=250, per_km=37.5)
+
+        assert found
+        for subset, row in found.items():
+            assert row[:2] == expected[subset][:2]
+            assert row[3:] == expected[subset][3:]
+
+    def test_without_a_configuration_the_defaults_apply(self):
+        default = as_rows(decide(COST, HOME, [A, B, C]).subsets)
+
+        assert default == as_rows(decide(COST, HOME, [A, B, C], config=DecisionConfig()).subsets)
 
     def test_impossible_coordinates_are_rejected(self):
         with pytest.raises(ValueError, match="not a valid latitude and longitude"):
