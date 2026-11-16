@@ -16,24 +16,25 @@ from shopping_agent.ingestion.canonical import (
     CanonicalError,
     build_canonical,
     build_prices,
+    read_table,
     require_integrity,
     write_canonical,
 )
 from support import RAW
 
 
-def test_write_canonical_writes_four_parquet_files_to_a_dated_folder(raw_dir, tmp_path):
+def test_write_canonical_writes_the_four_tables_to_a_dated_folder(raw_dir, tmp_path):
     folder = write_canonical(raw_dir, tmp_path / "canonical", VERSION, RUN_AT)
 
     assert folder == tmp_path / "canonical" / "v=2026-11-15"
     assert sorted(path.name for path in folder.iterdir()) == [
         "ingestion_runs.parquet",
-        "prices.parquet",
+        "prices",
         "products.parquet",
         "stores.parquet",
     ]
     for name, schema in SCHEMAS.items():
-        table = pl.read_parquet(folder / f"{name}.parquet")
+        table = read_table(folder, name)
         assert dict(table.schema) == schema
         assert table.height > 0
 
@@ -75,7 +76,7 @@ class TestWriteIsAtomic:
 
         assert [path.name for path in tmp_path.iterdir()] == ["v=2026-11-15"]
         for name in ("prices", "ingestion_runs"):
-            table = pl.read_parquet(tmp_path / "v=2026-11-15" / f"{name}.parquet")
+            table = read_table(tmp_path / "v=2026-11-15", name)
             assert table["ingestion_timestamp"].unique().to_list() == [RUN_AT]
 
     def test_a_rerun_replaces_every_file_of_the_dataset(self, raw_dir, tmp_path):
@@ -86,7 +87,7 @@ class TestWriteIsAtomic:
 
         assert [path.name for path in tmp_path.iterdir()] == ["v=2026-11-15"]
         for name in ("prices", "ingestion_runs"):
-            table = pl.read_parquet(tmp_path / "v=2026-11-15" / f"{name}.parquet")
+            table = read_table(tmp_path / "v=2026-11-15", name)
             assert table["ingestion_timestamp"].unique().to_list() == [later]
 
     def test_a_failed_swap_restores_the_previous_dataset(self, raw_dir, tmp_path, monkeypatch):
@@ -104,7 +105,7 @@ class TestWriteIsAtomic:
             write_canonical(raw_dir, tmp_path, VERSION, RUN_AT + timedelta(hours=6))
 
         assert [path.name for path in tmp_path.iterdir()] == ["v=2026-11-15"]
-        prices = pl.read_parquet(tmp_path / "v=2026-11-15" / "prices.parquet")
+        prices = read_table(tmp_path / "v=2026-11-15", "prices")
         assert prices["ingestion_timestamp"].unique().to_list() == [RUN_AT]
 
     def test_a_failed_swap_of_a_new_version_leaves_nothing_behind(
@@ -212,7 +213,7 @@ def test_overlapping_runs_of_one_version_never_mix_their_files(raw_dir, tmp_path
 
     assert errors == {}
     folder = tmp_path / "v=2026-11-15"
-    tables = {name: pl.read_parquet(folder / f"{name}.parquet") for name in SCHEMAS}
+    tables = {name: read_table(folder, name) for name in SCHEMAS}
     require_integrity(tables)
     # Every file comes from run B, the last to finish, which covers only Osher Ad.
     assert set(tables["ingestion_runs"]["chain"]) == {"osher_ad"}
@@ -229,7 +230,7 @@ def test_leftovers_of_a_killed_run_do_not_block_the_next_run(raw_dir, tmp_path):
 
     write_canonical(raw_dir, tmp_path, VERSION, later)
 
-    prices = pl.read_parquet(tmp_path / "v=2026-11-15" / "prices.parquet")
+    prices = read_table(tmp_path / "v=2026-11-15", "prices")
     assert prices["ingestion_timestamp"].unique().to_list() == [later]
 
 

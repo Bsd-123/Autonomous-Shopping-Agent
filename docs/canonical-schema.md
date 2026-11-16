@@ -7,10 +7,23 @@ The final schema of the four canonical tables (architecture section 4.1), adjust
 ```
 <out>/v=<dataset_version>/
     products.parquet
-    prices.parquet
     stores.parquet
     ingestion_runs.parquet
+    prices/
+        chain=maayan_2000/prices.parquet
+        chain=osher_ad/prices.parquet
+        chain=yesh_hesed/prices.parquet
 ```
+
+`prices` is partitioned by chain through the folder layout: one folder per chain, named `chain=<chain>`. A query that filters on `chain` opens only that chain's file:
+
+```sql
+SELECT product_key, store_id, price_agorot
+FROM read_parquet('v=2026-11-15/prices/*/*.parquet', hive_partitioning = true)
+WHERE chain = 'osher_ad';
+```
+
+The chain is the part of `store_id` before the colon. It is not stored inside the files; a reader that asks for hive partitioning gets it as the `chain` column from the folder name. In Python, `read_table(folder, "prices")` returns the whole table and `read_table(folder, "prices", chain="osher_ad")` one chain.
 
 Build it with:
 
@@ -108,6 +121,6 @@ Further quality metrics are added with the data-quality report.
 
 ## Differences from the section 4.1 proposal
 
-- `prices` is a single file for now; partitioning by chain through the folder layout is a separate step.
+- `prices` is one file per chain, in `chain=<chain>` folders, as described under the output layout.
 - `attributes` is stored as a JSON object in a string column, so every product can carry a different set of attributes.
 - `ingestion_runs` gains `ingestion_timestamp` and `newest_source_timestamp`.

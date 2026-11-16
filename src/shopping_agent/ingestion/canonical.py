@@ -18,6 +18,11 @@ import polars as pl
 from shopping_agent.ingestion.adapters import ADAPTERS, ChainAdapter
 from shopping_agent.ingestion.adapters.layout import SOURCE_TIME
 
+# ``prices`` is written as one file per chain, in folders named ``chain=<chain>``.
+PARTITIONED_TABLE = "prices"
+PARTITION_COLUMN = "chain"
+CHAIN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_]*")
+
 PRICE_FLAG_OK = "ok"
 PRICE_FLAG_CARRIED_FORWARD = "carried_forward"
 GEOCODE_PENDING = "pending"
@@ -265,6 +270,10 @@ def write_canonical(
 ) -> Path:
     """Write the four tables to ``<out_dir>/v=<dataset_version>/`` and return that folder.
 
+    ``prices`` is written as one file per chain under ``prices/chain=<chain>/``, so a
+    query for one chain reads only that chain's file. The other tables are one file each.
+    Use ``read_table`` to load any of them back.
+
     The files are written to a folder of their own next to it and moved into place
     once all four exist. A failed run leaves no partial dataset and a failed re-run
     keeps the previous one. Overlapping runs of one version cannot mix their files;
@@ -284,11 +293,57 @@ def write_canonical(
     staging.mkdir()  # not mkdtemp, which would make the published folder owner-only
     try:
         for name, table in tables.items():
-            table.write_parquet(staging / f"{name}.parquet")
+            _write_table(staging, name, table)
         _publish(staging, folder)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return folder
+
+
+def _chain_of_store() -> pl.Expr:
+    """The chain a price row belongs to: the part of ``store_id`` before the colon."""
+    return pl.col("store_id").str.split(":").list.first()
+
+
+def _write_table(folder: Path, name: str, table: pl.DataFrame) -> None:
+    """Write one table: ``prices`` partitioned by chain, any other as a single file."""
+    if name != PARTITIONED_TABLE:
+        table.write_parquet(folder / f"{name}.parquet")
+        return
+    prices_folder = folder / PARTITIONED_TABLE
+    prices_folder.mkdir()
+    parts = table.with_columns(_chain_of_store().alias(PARTITION_COLUMN)).partition_by(
+        PARTITION_COLUMN, as_dict=True, include_key=False, maintain_order=True
+    )
+    for (chain,), part in sorted(parts.items(), key=lambda item: str(item[0][0])):
+        if not isinstance(chain, str) or not CHAIN_PATTERN.fullmatch(chain):
+            raise CanonicalError(f"cannot partition prices by the chain {chain!r}")
+        chain_folder = prices_folder / f"{PARTITION_COLUMN}={chain}"
+        chain_folder.mkdir()
+        part.write_parquet(chain_folder / f"{PARTITIONED_TABLE}.parquet")
+
+
+def price_files(folder: Path, chain: str | None = None) -> list[Path]:
+    """The price files of a dataset folder, or of one chain in it, in chain order."""
+    pattern = f"{PARTITION_COLUMN}={chain if chain is not None else '*'}"
+    return sorted((Path(folder) / PARTITIONED_TABLE).glob(f"{pattern}/*.parquet"))
+
+
+def read_table(folder: Path, name: str, *, chain: str | None = None) -> pl.DataFrame:
+    """Read a table back from a dataset folder written by ``write_canonical``.
+
+    ``chain`` limits ``prices`` to one chain and opens only that chain's file.
+    """
+    if name not in SCHEMAS:
+        raise CanonicalError(f"unknown table {name!r}")
+    if name != PARTITIONED_TABLE:
+        if chain is not None:
+            raise CanonicalError(f"only {PARTITIONED_TABLE} is partitioned by chain")
+        return pl.read_parquet(Path(folder) / f"{name}.parquet")
+    files = price_files(folder, chain)
+    if not files:
+        return pl.DataFrame(schema=SCHEMAS[name])
+    return pl.concat([pl.read_parquet(file, hive_partitioning=False) for file in files])
 
 
 def _publish(staging: Path, folder: Path) -> None:

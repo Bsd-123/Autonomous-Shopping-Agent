@@ -4,11 +4,11 @@ import re
 import runpy
 import sys
 
-import polars as pl
 import pytest
 
 import shopping_agent.ingestion.__main__ as entry_point
 from shopping_agent.ingestion.__main__ import main
+from shopping_agent.ingestion.canonical import read_table
 
 
 def test_it_writes_the_dataset_and_reports_the_folder(raw_dir, tmp_path, capsys):
@@ -19,7 +19,7 @@ def test_it_writes_the_dataset_and_reports_the_folder(raw_dir, tmp_path, capsys)
     folder = tmp_path / "v=2026-11-15"
     assert status == 0
     assert capsys.readouterr().out.strip() == f"wrote canonical dataset to {folder}"
-    assert pl.read_parquet(folder / "prices.parquet").height == 218 + 300 + 160
+    assert read_table(folder, "prices").height == 218 + 300 + 160
 
 
 def test_the_version_defaults_to_the_run_date(raw_dir, tmp_path):
