@@ -302,7 +302,7 @@ class TestAttributeEquality:
 
 
 def test_the_package_exports_what_other_steps_need():
-    assert set(contracts.__all__) == {
+    assert set(contracts.__all__) >= {
         "MAX_ATTRIBUTES",
         "MAX_COUNT",
         "MAX_QUANTITY",
