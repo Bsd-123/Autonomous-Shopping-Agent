@@ -53,3 +53,20 @@ Every adapter returns two frames with the same columns and types for all chains,
 ## Sample files
 
 `tests/fixtures/raw/` holds small samples taken from the dataset on 2026-11-15, used by the adapter tests. Rows are copied as published. The Shufersal price sample joins two slices of the full file (the first 40 rows, and the first 160 rows of Yesh Hesed store 611); the first row of the second slice has its "same as above" cells written out so it does not depend on rows that were left out. They are redistributed under the dataset's licence.
+
+## Phase 1 scope
+
+Phase 1 covers the Bnei Brak branches of the three chains. `shopping_agent.ingestion.scope` restricts the adapter output to them:
+
+- `stores_in_scope(stores)` keeps the stores whose `city` is the Bnei Brak locality code, `6100`. All three chains write the city this way. A chain left with no branch raises `ScopeError`.
+- `prices_in_scope(prices, stores)` keeps the price rows of those stores.
+- `scope_report(stores, prices)` gives one row per chain: `branches`, `branches_with_prices` and `price_rows`, for the data-quality report.
+- `restrict_to_scope(stores, prices)` does all three.
+
+On the full files of 2026-11-14/15 this keeps 7 of 84 stores and 50,862 of 730,699 price rows:
+
+| Chain | Branches | Branches with prices | Price rows |
+|---|---|---|---|
+| `maayan_2000` | 3 | 3 | 11,106 |
+| `osher_ad` | 1 | 1 | 18,639 |
+| `yesh_hesed` | 3 | 3 | 21,117 |
