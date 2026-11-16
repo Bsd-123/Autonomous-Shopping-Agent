@@ -1,55 +1,27 @@
 """Adapter tests run against sample files cut from each chain's real data."""
 
 from decimal import Decimal
-from pathlib import Path
 
-import polars as pl
 import pytest
 
 from shopping_agent.ingestion.adapters import (
-    PRICE_SCHEMA,
-    STORE_SCHEMA,
+    ADAPTERS,
     Maayan2000Adapter,
     OsherAdAdapter,
     RawFormatError,
     YeshHesedAdapter,
 )
 from shopping_agent.ingestion.adapters.base import read_expanded
-
-RAW = Path(__file__).parents[2] / "fixtures" / "raw"
-PLACEHOLDERS = ["''", "", "לא ידוע", "XXXXX"]
-
-
-def assert_no_placeholders(frame: pl.DataFrame) -> None:
-    text = frame.select(pl.col(pl.String))
-    leaked = text.select(pl.all().is_in(PLACEHOLDERS).sum()).row(0)
-    assert sum(leaked) == 0
-
-
-def assert_store_layout(stores: pl.DataFrame, chain: str) -> None:
-    assert dict(stores.schema) == STORE_SCHEMA
-    assert stores["chain"].unique().to_list() == [chain]
-    assert stores["store_id"].is_unique().all()
-    assert stores["store_id"].str.starts_with(f"{chain}:").all()
-    assert stores.select(pl.col("store_id", "name", "source_timestamp").null_count().sum()).row(
-        0
-    ) == (0, 0, 0)
-    assert_no_placeholders(stores)
-
-
-def assert_price_layout(prices: pl.DataFrame, chain: str) -> None:
-    assert dict(prices.schema) == PRICE_SCHEMA
-    assert prices["chain"].unique().to_list() == [chain]
-    required = ["store_id", "item_code", "name", "is_weighed", "price", "source_file"]
-    assert sum(prices.select(pl.col(required).null_count()).row(0)) == 0
-    assert (prices["price"] > 0).all()
-    assert_no_placeholders(prices)
-
-
-def row(frame: pl.DataFrame, **where: str) -> dict:
-    matches = frame.filter(**where)
-    assert matches.height >= 1, where
-    return matches.row(0, named=True)
+from support import (
+    OSHER_PRICES,
+    RAW,
+    assert_price_layout,
+    assert_store_layout,
+    row,
+    stage_fixture,
+    stage_shufersal,
+    write_store_snapshots,
+)
 
 
 class TestReadExpanded:
@@ -104,6 +76,19 @@ class TestOsherAd:
         assert prices["qty_in_package"].null_count() == prices.height
         assert prices["unit"].null_count() == 76
         assert not prices["unit_of_measure"].str.ends_with(" ").any()
+
+    def test_full_and_update_price_files_are_both_read(self, tmp_path):
+        full = stage_fixture(tmp_path, OSHER_PRICES, file_name="PriceFull.xml")
+        full.rename(full.with_name("price_full_file_osher_ad.csv"))
+        stage_fixture(tmp_path, OSHER_PRICES)
+
+        prices = OsherAdAdapter().read_prices(tmp_path)
+
+        assert_price_layout(prices, "osher_ad")
+        # The full list comes first, then the updates; rows are kept as published.
+        full_rows, update_rows = prices.head(218), prices.tail(218)
+        assert full_rows["source_file"][0] == "PriceFull.xml"
+        assert full_rows.drop("source_file").equals(update_rows.drop("source_file"))
 
 
 class TestMaayan2000:
@@ -163,3 +148,62 @@ class TestYeshHesed:
         assert beans["is_weighed"] is False
         # Shufersal timestamps carry no milliseconds.
         assert prices["source_timestamp"].null_count() == 0
+
+    def test_stores_can_be_passed_in_so_the_store_file_is_not_read_again(self, tmp_path):
+        stores = YeshHesedAdapter().read_stores(RAW)
+        stage_shufersal(tmp_path, stores=False)
+
+        prices = YeshHesedAdapter().read_prices(tmp_path, stores)
+
+        assert prices.equals(YeshHesedAdapter().read_prices(RAW))
+
+
+@pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda adapter: adapter.chain)
+def test_passing_the_stores_never_changes_the_prices(adapter):
+    stores = adapter.read_stores(RAW)
+
+    assert adapter.read_prices(RAW, stores).equals(adapter.read_prices(RAW))
+
+
+class TestIsraelLocalTime:
+    @pytest.mark.parametrize(
+        ("published", "expected"),
+        [
+            ("2026-01-15T07:46:57", "2026-01-15T07:46:57+02:00"),
+            ("2026-07-01T12:00:00", "2026-07-01T12:00:00+03:00"),
+            # The repeated hour of the clocks going back is read as the earlier one.
+            ("2026-10-25T01:30:00", "2026-10-25T01:30:00+03:00"),
+        ],
+    )
+    def test_published_time_is_read_as_israel_local_time(self, tmp_path, published, expected):
+        stage_fixture(tmp_path, OSHER_PRICES, priceupdatetime=published)
+
+        timestamp = OsherAdAdapter().read_prices(tmp_path)["source_timestamp"][0]
+
+        assert timestamp.isoformat() == expected
+
+    def test_store_snapshot_time_is_israel_local_time(self):
+        stores = OsherAdAdapter().read_stores(RAW)
+
+        assert stores["source_timestamp"][0].isoformat() == "2026-11-14T08:05:00.900000+02:00"
+
+
+class TestStoreSnapshots:
+    def test_newest_snapshot_is_chosen_by_time_not_by_text(self, tmp_path):
+        # As text "9:05:00" sorts after "10:01:00", but it is the earlier time.
+        write_store_snapshots(
+            tmp_path, ("2026-11-14", "9:05:00", "1"), ("2026-11-14", "10:01:00", "2")
+        )
+
+        stores = OsherAdAdapter().read_stores(tmp_path)
+
+        assert stores["store_id"].to_list() == ["osher_ad:2"]
+
+    def test_a_store_listed_in_two_snapshots_is_not_a_duplicate(self, tmp_path):
+        write_store_snapshots(
+            tmp_path, ("2026-11-13", "08:00:00", "11"), ("2026-11-14", "08:05:00", "11")
+        )
+
+        stores = OsherAdAdapter().read_stores(tmp_path)
+
+        assert stores["store_id"].to_list() == ["osher_ad:11"]

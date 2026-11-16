@@ -5,12 +5,14 @@ description = "Turns a natural-language shopping list into the cheapest basket a
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "polars>=1.0",
+    "polars>=2.1",
     "pydantic>=2.7",
+    "tzdata>=2024.1",
 ]
 
 [dependency-groups]
 dev = [
+    "mypy>=1.10",
     "pytest>=8.0",
     "ruff>=0.6",
 ]
@@ -24,10 +26,15 @@ packages = ["src/shopping_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests/ingestion/adapters"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "tests/ingestion/adapters"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+strict = true
+files = ["src"]
