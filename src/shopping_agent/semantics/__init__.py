@@ -16,6 +16,7 @@ from shopping_agent.semantics.filters import (
     filter_candidates,
     quantity_exclusion,
 )
+from shopping_agent.semantics.ranking import rank_candidates, unit_price
 
 __all__ = [
     "OVERBUY_LIMIT",
@@ -30,4 +31,6 @@ __all__ = [
     "candidate_cost",
     "filter_candidates",
     "quantity_exclusion",
+    "rank_candidates",
+    "unit_price",
 ]
