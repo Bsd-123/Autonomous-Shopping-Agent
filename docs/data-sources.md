@@ -44,6 +44,7 @@ Every adapter returns two frames with the same columns and types for all chains,
 - `city` is the raw value from the file, usually a Central Bureau of Statistics locality code (Bnei Brak is `6100`).
 - `price` is the shelf price in shekels as published. Conversion to integer agorot, cleaning, unit normalization and the canonical tables are later pipeline steps.
 - Adapters return every row found in the price files, including repeated listings of the same item; duplicates are resolved in the cleaning step.
+- A value that is present but does not parse (a store number, price, quantity, weighed flag or timestamp), or a store row without an update time, raises `RawFormatError`. It never becomes a silent null. Prices must have at most two decimal places.
 
 ## Sample files
 

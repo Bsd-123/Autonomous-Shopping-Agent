@@ -11,6 +11,7 @@ layout in ``layout.py``. Everything that differs between chains lives in the
 subclasses: the source folder, placeholder values, and row selection.
 """
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import ClassVar
 
@@ -49,8 +50,27 @@ RAW_PRICE_COLUMNS = (
 )
 
 
+PRICE_PATTERN = r"^-?\d+(\.\d{1,2})?$"
+
+
 class RawFormatError(ValueError):
-    """A raw file is missing or does not have the expected columns."""
+    """A raw file is missing, lacks expected columns, or holds values that do not parse."""
+
+
+def require_parsed(raw: pl.DataFrame, parsed: pl.DataFrame, columns: Mapping[str, str]) -> None:
+    """Fail when a value present in a raw column is null after parsing.
+
+    ``raw`` and ``parsed`` must be row-aligned. ``columns`` maps each raw column
+    to the output column parsed from it.
+    """
+    for raw_column, column in columns.items():
+        lost = raw[raw_column].is_not_null() & parsed[column].is_null()
+        if lost.any():
+            bad = raw.filter(lost)
+            raise RawFormatError(
+                f"{bad['file_name'][0]}: {bad.height} {raw_column} value(s) do not parse, "
+                f"first: {bad[raw_column][0]!r}"
+            )
 
 
 def read_expanded(
@@ -89,9 +109,12 @@ class ChainAdapter:
         # The file can hold several daily snapshots; only the newest is current.
         updated = pl.concat_str("lastupdatedate", "lastupdatetime", separator=" ")
         raw = raw.with_columns(updated.alias("updated"))
+        undated = raw["updated"].null_count()
+        if undated:
+            raise RawFormatError(f"{path.name} has {undated} store row(s) without an update time")
         raw = raw.filter(pl.col("updated") == raw["updated"].max())
         raw = self.select_raw_stores(raw)
-        return raw.select(
+        stores = raw.select(
             chain=pl.lit(self.chain),
             store_id=self._store_id(),
             name="storename",
@@ -100,7 +123,9 @@ class ChainAdapter:
             zipcode="zipcode",
             source_timestamp=pl.col("updated").str.to_datetime(strict=False, time_unit="ms"),
             source_file="file_name",
-        ).cast(STORE_SCHEMA)
+        )
+        require_parsed(raw, stores, {"storeid": "store_id", "updated": "source_timestamp"})
+        return stores.cast(STORE_SCHEMA)
 
     def read_prices(self, raw_dir: Path) -> pl.DataFrame:
         folder = Path(raw_dir) / self.source_folder
@@ -113,23 +138,41 @@ class ChainAdapter:
         raw = pl.concat(
             [read_expanded(path, RAW_PRICE_COLUMNS, self.null_markers) for path in paths]
         )
-        return raw.select(
+        weighed = pl.col("bisweighted")
+        price = pl.col("itemprice")
+        prices = raw.select(
             chain=pl.lit(self.chain),
             store_id=self._store_id(),
             item_code="itemcode",
             name="itemname",
             manufacturer="manufacturename",
-            is_weighed=pl.col("bisweighted") == "1",
+            is_weighed=pl.when(weighed == "1").then(True).when(weighed == "0").then(False),
             quantity=pl.col("quantity").cast(pl.Float64, strict=False),
             unit="unitqty",
             unit_of_measure="unitofmeasure",
             qty_in_package=pl.col("qtyinpackage").cast(pl.Float64, strict=False),
-            price=pl.col("itemprice").cast(pl.Decimal(12, 2), strict=False),
+            # The Decimal cast truncates extra digits, so the format is checked first.
+            price=pl.when(price.str.contains(PRICE_PATTERN)).then(
+                price.cast(pl.Decimal(12, 2), strict=False)
+            ),
             source_timestamp=pl.col("priceupdatetime").str.to_datetime(
                 strict=False, time_unit="ms"
             ),
             source_file="file_name",
-        ).cast(PRICE_SCHEMA)
+        )
+        require_parsed(
+            raw,
+            prices,
+            {
+                "storeid": "store_id",
+                "bisweighted": "is_weighed",
+                "quantity": "quantity",
+                "qtyinpackage": "qty_in_package",
+                "itemprice": "price",
+                "priceupdatetime": "source_timestamp",
+            },
+        )
+        return prices.cast(PRICE_SCHEMA)
 
     def select_raw_stores(self, raw: pl.DataFrame) -> pl.DataFrame:
         """Hook for chains whose files hold more than the chain itself."""

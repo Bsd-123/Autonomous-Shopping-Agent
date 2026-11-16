@@ -163,3 +163,65 @@ class TestYeshHesed:
         assert beans["is_weighed"] is False
         # Shufersal timestamps carry no milliseconds.
         assert prices["source_timestamp"].null_count() == 0
+
+
+def copy_fixture(source: Path, target: Path, **first_row: str) -> None:
+    """Copy a fixture CSV, replacing cells of its first row (which holds every value)."""
+    frame = pl.read_csv(source, infer_schema=False)
+    first = pl.int_range(pl.len()) == 0
+    frame = frame.with_columns(
+        pl.when(first).then(pl.lit(value)).otherwise(pl.col(column)).alias(column)
+        for column, value in first_row.items()
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    frame.write_csv(target)
+
+
+class TestFailsLoudlyOnUnparseableValues:
+    PRICES = RAW / "osherad" / "price_file_osher_ad.csv"
+    STORES = RAW / "osherad" / "store_file_osher_ad.csv"
+
+    @pytest.mark.parametrize(
+        ("column", "value"),
+        [
+            ("itemprice", "12,90"),
+            ("itemprice", "1.505"),
+            ("quantity", "abc"),
+            ("qtyinpackage", "1/2"),
+            ("bisweighted", "yes"),
+            ("storeid", "A6"),
+            ("priceupdatetime", "yesterday"),
+        ],
+    )
+    def test_prices(self, tmp_path, column, value):
+        copy_fixture(self.PRICES, tmp_path / "osherad" / self.PRICES.name, **{column: value})
+
+        with pytest.raises(RawFormatError, match=f"{column} value"):
+            OsherAdAdapter().read_prices(tmp_path)
+
+    def test_store_number(self, tmp_path):
+        copy_fixture(self.STORES, tmp_path / "osherad" / self.STORES.name, storeid="A1")
+
+        with pytest.raises(RawFormatError, match="storeid value"):
+            OsherAdAdapter().read_stores(tmp_path)
+
+    def test_store_rows_without_update_time(self, tmp_path):
+        copy_fixture(self.STORES, tmp_path / "osherad" / self.STORES.name, lastupdatedate="''")
+
+        with pytest.raises(RawFormatError, match="without an update time"):
+            OsherAdAdapter().read_stores(tmp_path)
+
+
+def test_full_and_update_price_files_are_both_read(tmp_path):
+    source = RAW / "osherad" / "price_file_osher_ad.csv"
+    folder = tmp_path / "osherad"
+    copy_fixture(source, folder / "price_file_osher_ad.csv")
+    copy_fixture(source, folder / "price_full_file_osher_ad.csv", file_name="PriceFull.xml")
+
+    prices = OsherAdAdapter().read_prices(tmp_path)
+
+    assert_price_layout(prices, "osher_ad")
+    # The full list comes first, then the updates; rows are kept as published.
+    full, update = prices.head(218), prices.tail(218)
+    assert full["source_file"][0] == "PriceFull.xml"
+    assert full.drop("source_file").equals(update.drop("source_file"))
