@@ -2,18 +2,10 @@
 
 import polars as pl
 import pytest
-from support import (
-    OSHER_PRICES,
-    OSHER_STORES,
-    RAW,
-    stage_fixture,
-    stage_shufersal,
-    write_header_only,
-    write_store_snapshots,
-)
 
 from shopping_agent.ingestion.adapters import (
     ChainAdapter,
+    Maayan2000Adapter,
     OsherAdAdapter,
     RawFormatError,
     YeshHesedAdapter,
@@ -23,6 +15,16 @@ from shopping_agent.ingestion.adapters.base import (
     RAW_STORE_COLUMNS,
     Parsed,
     build_frame,
+)
+from support import (
+    MAAYAN_PRICES,
+    OSHER_PRICES,
+    OSHER_STORES,
+    RAW,
+    stage_fixture,
+    stage_shufersal,
+    write_header_only,
+    write_store_snapshots,
 )
 
 
@@ -83,13 +85,15 @@ class TestEmptyResults:
     def test_a_price_file_without_rows(self, tmp_path):
         write_header_only(tmp_path, OSHER_PRICES, RAW_PRICE_COLUMNS)
 
-        with pytest.raises(RawFormatError, match="no osher_ad price rows"):
+        with pytest.raises(RawFormatError, match="no osher_ad price rows found in .*osherad"):
             OsherAdAdapter().read_prices(tmp_path)
 
     def test_a_store_file_without_rows(self, tmp_path):
         write_header_only(tmp_path, OSHER_STORES, RAW_STORE_COLUMNS)
 
-        with pytest.raises(RawFormatError, match="no osher_ad stores"):
+        with pytest.raises(
+            RawFormatError, match=r"no osher_ad stores found in store_file_osher_ad\.csv"
+        ):
             OsherAdAdapter().read_stores(tmp_path)
 
     def test_a_renamed_sub_chain_is_not_returned_as_an_empty_chain(self, monkeypatch):
@@ -97,7 +101,9 @@ class TestEmptyResults:
             "shopping_agent.ingestion.adapters.yesh_hesed.SUB_CHAIN_NAME", "renamed"
         )
 
-        with pytest.raises(RawFormatError, match="no yesh_hesed stores"):
+        with pytest.raises(
+            RawFormatError, match=r"no yesh_hesed stores found in store_file_shufersal\.csv"
+        ):
             YeshHesedAdapter().read_stores(RAW)
 
     def test_a_price_file_without_rows_of_the_chain_stores(self):
@@ -105,8 +111,34 @@ class TestEmptyResults:
         stores = YeshHesedAdapter().read_stores(RAW)
         without_611 = stores.filter(pl.col("store_id") != "yesh_hesed:611")
 
-        with pytest.raises(RawFormatError, match="no yesh_hesed price rows"):
+        with pytest.raises(RawFormatError, match="yesh_hesed price rows for its stores found in"):
             YeshHesedAdapter().read_prices(RAW, without_611)
+
+
+class TestUnknownStores:
+    @pytest.mark.parametrize(
+        ("adapter", "prices"),
+        [(OsherAdAdapter(), OSHER_PRICES), (Maayan2000Adapter(), MAAYAN_PRICES)],
+        ids=["osher_ad", "maayan_2000"],
+    )
+    def test_price_rows_of_an_unlisted_store_fail_when_the_stores_are_given(
+        self, tmp_path, adapter, prices
+    ):
+        stage_fixture(tmp_path, prices, storeid="999")
+
+        with pytest.raises(RawFormatError, match=f"{adapter.chain} prices for unknown stores: "):
+            adapter.read_prices(tmp_path, adapter.read_stores(RAW))
+
+    def test_the_unknown_stores_are_named(self, tmp_path):
+        stage_fixture(tmp_path, OSHER_PRICES, storeid="999")
+
+        with pytest.raises(RawFormatError, match="unknown stores: osher_ad:999$"):
+            OsherAdAdapter().read_prices(tmp_path, OsherAdAdapter().read_stores(RAW))
+
+    def test_without_the_stores_nothing_is_compared(self, tmp_path):
+        stage_fixture(tmp_path, OSHER_PRICES, storeid="999")
+
+        assert OsherAdAdapter().read_prices(tmp_path)["store_id"][0] == "osher_ad:999"
 
 
 class TestStoreKey:

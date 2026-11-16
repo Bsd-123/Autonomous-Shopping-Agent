@@ -9,6 +9,7 @@ from shopping_agent.ingestion.adapters import PRICE_SCHEMA, STORE_SCHEMA
 from shopping_agent.ingestion.adapters.base import RAW_STORE_COLUMNS
 
 RAW = Path(__file__).parents[2] / "fixtures" / "raw"
+MAAYAN_PRICES = RAW / "maayan2000" / "price_file_maayan_2000.csv"
 OSHER_PRICES = RAW / "osherad" / "price_file_osher_ad.csv"
 OSHER_STORES = RAW / "osherad" / "store_file_osher_ad.csv"
 SHUFERSAL_PRICES = RAW / "shufersal" / "price_full_file_shufersal.csv"

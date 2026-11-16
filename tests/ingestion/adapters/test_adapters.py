@@ -3,6 +3,15 @@
 from decimal import Decimal
 
 import pytest
+
+from shopping_agent.ingestion.adapters import (
+    ADAPTERS,
+    Maayan2000Adapter,
+    OsherAdAdapter,
+    RawFormatError,
+    YeshHesedAdapter,
+)
+from shopping_agent.ingestion.adapters.base import read_expanded
 from support import (
     OSHER_PRICES,
     RAW,
@@ -13,15 +22,6 @@ from support import (
     stage_shufersal,
     write_store_snapshots,
 )
-
-from shopping_agent.ingestion.adapters import (
-    ADAPTERS,
-    Maayan2000Adapter,
-    OsherAdAdapter,
-    RawFormatError,
-    YeshHesedAdapter,
-)
-from shopping_agent.ingestion.adapters.base import read_expanded
 
 
 class TestReadExpanded:

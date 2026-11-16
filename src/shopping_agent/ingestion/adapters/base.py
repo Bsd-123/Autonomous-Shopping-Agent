@@ -99,14 +99,14 @@ def require_parsed(raw: pl.DataFrame, parsed: pl.DataFrame, sources: Mapping[str
             )
 
 
-def require_rows(frame: pl.DataFrame, what: str) -> pl.DataFrame:
+def require_rows(frame: pl.DataFrame, what: str, where: str) -> pl.DataFrame:
     """Return ``frame``, failing when it is empty.
 
     Rows that vanish entirely, for example when a sub-chain is renamed, are
     drift in the source and must not pass as an empty chain.
     """
     if frame.is_empty():
-        raise RawFormatError(f"no {what} found")
+        raise RawFormatError(f"no {what} found in {where}")
     return frame
 
 
@@ -188,6 +188,11 @@ class ChainAdapter:
             raise TypeError(f"{cls.__name__} must set: {', '.join(unset)}")
 
     def read_stores(self, raw_dir: Path) -> pl.DataFrame:
+        """Read the chain's stores from the newest snapshot in the store file.
+
+        Raises ``RawFormatError`` for a row without a readable update time (in any
+        snapshot), for no stores, and for two stores that share a ``store_id``.
+        """
         path = raw_dir / self.source_folder / f"store_file_{self.source_name}.csv"
         raw = read_expanded(path, RAW_STORE_COLUMNS, self.null_markers)
         updated = pl.concat_str("lastupdatedate", "lastupdatetime", separator=" ")
@@ -201,9 +206,7 @@ class ChainAdapter:
         require_parsed(snapshots, snapshots, {"updated_at": "updated"})
         # The file can hold several daily snapshots; only the newest is current.
         newest = snapshots.filter(pl.col("updated_at") == pl.col("updated_at").max())
-        selected = require_rows(
-            self.select_raw_stores(newest), f"{self.chain} stores in {path.name}"
-        )
+        selected = require_rows(self.select_raw_stores(newest), f"{self.chain} stores", path.name)
         stores = build_frame(
             selected,
             {
@@ -224,14 +227,33 @@ class ChainAdapter:
     def read_prices(self, raw_dir: Path, stores: pl.DataFrame | None = None) -> pl.DataFrame:
         """Read the chain's prices.
 
-        ``stores`` is the frame from ``read_stores``. Chains whose price files hold
-        other chains' rows use it to select their own; the others ignore it.
+        When ``stores`` (the frame from ``read_stores``) is given, every price row
+        must belong to one of its stores, so a row for an unlisted store raises
+        ``RawFormatError`` instead of being dropped later without a trace.
         """
-        return self._parse_prices(self._read_raw_prices(raw_dir))
+        raw = self._read_raw_prices(raw_dir)
+        if stores is not None:
+            raw = self._own_rows(raw, stores)
+        return self._parse_prices(raw)
 
     def select_raw_stores(self, raw: pl.DataFrame) -> pl.DataFrame:
         """Hook for chains whose files hold more than the chain itself."""
         return raw
+
+    def _own_rows(self, raw: pl.DataFrame, stores: pl.DataFrame) -> pl.DataFrame:
+        """Return the raw price rows of ``stores``; chains sharing files override this."""
+        store_ids = self._store_ids(raw)
+        unknown = store_ids.filter(~store_ids.is_in(stores["store_id"].implode()))
+        if not unknown.is_empty():
+            listed = ", ".join(unknown.unique().sort().head(5))
+            raise RawFormatError(f"{self.chain} prices for unknown stores: {listed}")
+        return raw
+
+    def _store_ids(self, raw: pl.DataFrame) -> pl.Series:
+        """The ``store_id`` of every raw row; a store number that cannot be read fails."""
+        store_ids = raw.select(store_id=self._store_id())
+        require_parsed(raw, store_ids, {"store_id": "storeid"})
+        return store_ids["store_id"]
 
     def _read_raw_prices(self, raw_dir: Path) -> pl.DataFrame:
         folder = raw_dir / self.source_folder
@@ -244,7 +266,7 @@ class ChainAdapter:
         raw = pl.concat(
             [read_expanded(path, RAW_PRICE_COLUMNS, self.null_markers) for path in paths]
         )
-        return require_rows(raw, f"{self.chain} price rows in {folder}")
+        return require_rows(raw, f"{self.chain} price rows", str(folder))
 
     def _parse_prices(self, raw: pl.DataFrame) -> pl.DataFrame:
         weighed = pl.col("bisweighted")

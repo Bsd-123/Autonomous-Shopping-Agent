@@ -9,7 +9,7 @@ from pathlib import Path
 
 import polars as pl
 
-from shopping_agent.ingestion.adapters.base import ChainAdapter, require_parsed, require_rows
+from shopping_agent.ingestion.adapters.base import ChainAdapter, require_rows
 
 SUB_CHAIN_NAME = "יש חסד"
 
@@ -25,16 +25,15 @@ class YeshHesedAdapter(ChainAdapter):
     def read_prices(self, raw_dir: Path, stores: pl.DataFrame | None = None) -> pl.DataFrame:
         """Read the prices of the Yesh Hesed stores.
 
-        Pass the frame from ``read_stores`` as ``stores`` to avoid reading the
-        store file a second time.
+        The rows have to be selected by store, so the store file is read here when
+        ``stores`` is not given.
         """
-        if stores is None:
-            stores = self.read_stores(raw_dir)
+        return super().read_prices(raw_dir, self.read_stores(raw_dir) if stores is None else stores)
+
+    def _own_rows(self, raw: pl.DataFrame, stores: pl.DataFrame) -> pl.DataFrame:
         # Other sub-chains hold about 94% of the rows. They are dropped before
         # parsing, so they cost no memory and only their store numbers are
         # validated: a row whose number cannot be read could belong to any store.
-        raw = self._read_raw_prices(raw_dir)
-        store_ids = raw.select(store_id=self._store_id())
-        require_parsed(raw, store_ids, {"store_id": "storeid"})
-        own = raw.filter(store_ids["store_id"].is_in(stores["store_id"].implode()))
-        return self._parse_prices(require_rows(own, f"{self.chain} price rows for its stores"))
+        store_ids = self._store_ids(raw)
+        own = raw.filter(store_ids.is_in(stores["store_id"].implode()))
+        return require_rows(own, f"{self.chain} price rows for its stores", self.source_folder)
