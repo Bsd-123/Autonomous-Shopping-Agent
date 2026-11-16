@@ -14,4 +14,4 @@ uv run ruff format --check .
 uv run mypy
 ```
 
-Documentation is in `docs/`: the system architecture, the work breakdown, and the data sources and chain adapters.
+Documentation is in `docs/`: the system architecture, the work breakdown, the data sources and chain adapters, and the canonical schema.

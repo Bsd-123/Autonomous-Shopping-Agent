@@ -26,11 +26,11 @@ packages = ["src/shopping_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests/ingestion/adapters"]
+pythonpath = ["tests/ingestion", "tests/ingestion/adapters"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "tests/ingestion/adapters"]
+src = ["src", "tests", "tests/ingestion", "tests/ingestion/adapters"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
