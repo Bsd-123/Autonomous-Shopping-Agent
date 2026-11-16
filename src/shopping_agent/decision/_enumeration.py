@@ -8,6 +8,10 @@ anywhere else. For every subset S of one, two or three stores it computes:
     travel(S)    = c x shortest tour home -> stores in S -> home
     total(S)     = basket(S) + F x (|S| - 1) + travel(S)
 
+A subset in which some store supplies no item is marked: the same basket is
+already covered by the subset without that store, so the penalty and travel of
+an idle store are never charged. ``decide()`` leaves the marked subsets out.
+
 All subsets of one size are evaluated together as NumPy arrays.
 """
 
@@ -37,6 +41,7 @@ class SubsetTable:
     ``stores`` holds the positions of a subset's stores in the cost matrix,
     padded with ``NO_STORE`` for subsets of fewer than three. Distances stay
     floating-point kilometres; ``travel_agorot`` is the travel cost rounded once.
+    ``has_idle_store`` marks a subset in which some store supplies no item.
     """
 
     stores: Int
@@ -46,9 +51,23 @@ class SubsetTable:
     travel_km: Float
     travel_agorot: Int
     total_agorot: Int
+    has_idle_store: NDArray[np.bool_]
 
     def __len__(self) -> int:
         return len(self.size)
+
+    def where(self, keep: NDArray[np.bool_]) -> "SubsetTable":
+        """The rows for which ``keep`` is true."""
+        return SubsetTable(
+            self.stores[keep],
+            self.size[keep],
+            self.fulfilled[keep],
+            self.basket_agorot[keep],
+            self.travel_km[keep],
+            self.travel_agorot[keep],
+            self.total_agorot[keep],
+            self.has_idle_store[keep],
+        )
 
 
 def _distances(
@@ -86,6 +105,25 @@ def _round_half_up(values: Float) -> Int:
     return np.floor(values + 0.5).astype(np.int64)
 
 
+def _has_idle_store(priced: Int, subsets: Int, cheapest: Int) -> NDArray[np.bool_]:
+    """Whether some store of each subset supplies no item.
+
+    A store is idle when the subset without it gives every item the same lowest
+    cost, so nothing is bought there. A store that only matches another store's
+    price is idle too: the basket is the same without it.
+    """
+    size = subsets.shape[1]
+    if size == 1:
+        alone: NDArray[np.bool_] = ~(cheapest != _FAR).any(axis=0)
+        return alone
+    idle = np.zeros(len(subsets), dtype=np.bool_)
+    for position in range(size):
+        others = np.delete(subsets, position, axis=1)
+        without = priced[:, others].min(axis=2)
+        idle |= (without == cheapest).all(axis=0)
+    return idle
+
+
 def evaluate_subsets(
     cost: Int,
     home: tuple[float, float],
@@ -106,6 +144,7 @@ def evaluate_subsets(
 
     parts: list[tuple[Int, ...]] = []
     travel_parts: list[Float] = []
+    idle_parts: list[NDArray[np.bool_]] = []
     for size in range(1, min(MAX_TOUR_STORES, store_count) + 1):
         subsets = np.array(list(combinations(range(store_count), size)), dtype=np.int64)
         # cheapest[i, n] is the lowest cost of item i among the stores of subset n.
@@ -127,6 +166,7 @@ def evaluate_subsets(
             )
         )
         travel_parts.append(travel_km)
+        idle_parts.append(_has_idle_store(priced, subsets, cheapest))
 
     if not parts:
         empty = np.zeros(0, dtype=np.int64)
@@ -138,6 +178,7 @@ def evaluate_subsets(
             np.zeros(0, dtype=np.float64),
             empty,
             empty,
+            np.zeros(0, dtype=np.bool_),
         )
     padded_all, sizes, fulfilled, baskets, travels, totals = (
         np.concatenate(column) for column in zip(*parts, strict=True)
@@ -150,4 +191,5 @@ def evaluate_subsets(
         travel_km=np.concatenate(travel_parts),
         travel_agorot=travels,
         total_agorot=totals,
+        has_idle_store=np.concatenate(idle_parts),
     )

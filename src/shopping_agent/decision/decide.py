@@ -25,9 +25,15 @@ DEFAULT_TRAVEL_AGOROT_PER_KM = 100.0  # c
 
 @dataclass(frozen=True, slots=True, eq=False)
 class Decision:
-    """The outcome of ``decide()``: every subset of one to three stores, evaluated."""
+    """The outcome of ``decide()``.
+
+    ``subsets`` holds every subset of one to three stores in which each store
+    supplies at least one item. ``evaluated`` counts all the subsets that were
+    looked at, including those left out for an idle store.
+    """
 
     subsets: SubsetTable
+    evaluated: int
 
 
 def _checked_cost(cost: ArrayLike, store_count: int) -> np.ndarray:
@@ -70,12 +76,11 @@ def decide(
     if not isfinite(travel_agorot_per_km) or travel_agorot_per_km < 0:
         raise ValueError("travel_agorot_per_km must be a finite number, zero or more")
     matrix = _checked_cost(cost, len(stores))
-    return Decision(
-        subsets=evaluate_subsets(
-            matrix,
-            home,
-            stores,
-            penalty_agorot=penalty_agorot,
-            travel_agorot_per_km=travel_agorot_per_km,
-        )
+    table = evaluate_subsets(
+        matrix,
+        home,
+        stores,
+        penalty_agorot=penalty_agorot,
+        travel_agorot_per_km=travel_agorot_per_km,
     )
+    return Decision(subsets=table.where(~table.has_idle_store), evaluated=len(table))
