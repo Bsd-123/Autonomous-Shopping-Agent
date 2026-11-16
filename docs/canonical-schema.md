@@ -24,10 +24,13 @@ uv run python -m shopping_agent.ingestion --raw data/raw --out data/canonical
 
 A run either writes a complete dataset or writes nothing. A problem in the data or the settings is reported as a one-line error with exit code 1:
 
-- **The folder appears whole or not at all.** The files are written to a hidden folder next to `v=<dataset_version>` and moved into place once all four exist. A failed run leaves nothing behind, and a failed re-run of the same version keeps the previous dataset intact.
+- **The folder appears whole or not at all.** The files are written to a hidden folder of the run's own (`.v=<dataset_version>.<random>.tmp`) next to `v=<dataset_version>` and moved into place once all four exist. A failed run leaves nothing behind, and a failed re-run of the same version keeps the previous dataset. Two runs of the same version cannot mix their files; the one that finishes last wins.
+- **Replacing a dataset is two renames, not one atomic step.** For a moment `v=<dataset_version>` does not exist, and a crash right then leaves the previous dataset in a hidden `.v=<dataset_version>.<random>.old` folder. A reader that needs a name that is always valid should follow a version pointer, not the folder name. Hidden `.tmp` and `.old` folders left by a killed run can be deleted.
 - **Keys exist and are unique:** `products.product_key` and `stores.store_id` have no nulls and no repeats. A listing without an item code fails the run.
-- **Every price points at a row:** `prices.product_key` is in `products` and `prices.store_id` is in `stores`. A price row for a store that is missing from the store file fails the run.
+- **Every price points at a row:** `prices.product_key` is in `products` and `prices.store_id` is in `stores`. A price row for a store that is missing from the store file fails the run for Osher Ad and Maayan 2000. Yesh Hesed shares Shufersal's files, so it leaves out the rows of stores it does not list, because they belong to other sub-chains.
 - **`ingestion_timestamp` must carry a time zone.**
+
+**Decision to revisit with the cleaning step (#7):** stopping the run for an unknown store is deliberate, because a failed run deploys nothing. If a closed store's price file ever outlives its entry in the store file, a single shop would block the daily run. Then those rows should be counted in `ingestion_runs.rows_rejected` (always 0 today) instead of failing the run. The real data of 2026-11-14/15 has no such rows.
 
 ## Status of columns
 

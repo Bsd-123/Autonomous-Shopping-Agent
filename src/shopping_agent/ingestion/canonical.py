@@ -8,6 +8,8 @@ See ``docs/canonical-schema.md`` for the column-by-column description.
 
 import re
 import shutil
+import tempfile
+import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -264,19 +266,22 @@ def write_canonical(
 ) -> Path:
     """Write the four tables to ``<out_dir>/v=<dataset_version>/`` and return that folder.
 
-    The folder appears whole or not at all: the files are written next to it
-    first, so a failed run leaves no partial dataset and keeps a previous run of
-    the same version intact.
+    The files are written to a folder of their own next to it and moved into place
+    once all four exist. A failed run leaves no partial dataset and a failed re-run
+    keeps the previous one. Overlapping runs of one version cannot mix their files;
+    the last one to finish wins. Two renames are not one atomic step, so while a
+    previous dataset is being replaced ``v=<dataset_version>`` briefly does not
+    exist, and a crash right then leaves the old one in a hidden ``.v=*.old`` folder.
     """
     ingestion_timestamp = _require_aware(ingestion_timestamp or datetime.now(UTC))
     if dataset_version is None:
         dataset_version = ingestion_timestamp.astimezone(UTC).date().isoformat()
     tables = build_canonical(raw_dir, dataset_version, ingestion_timestamp, adapters)
     folder = Path(out_dir) / f"v={dataset_version}"
-    # Dot-prefixed, so a reader looking for ``v=*`` never meets a half-written folder.
-    staging = folder.with_name(f".{folder.name}.tmp")
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True)
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    # Dot-prefixed, so a reader looking for ``v=*`` never meets a half-written folder,
+    # and unique, so a second run of the same version cannot write into this one.
+    staging = Path(tempfile.mkdtemp(prefix=f".{folder.name}.", suffix=".tmp", dir=folder.parent))
     try:
         for name, table in tables.items():
             table.write_parquet(staging / f"{name}.parquet")
@@ -288,8 +293,7 @@ def write_canonical(
 
 def _publish(staging: Path, folder: Path) -> None:
     """Move the finished ``staging`` folder to ``folder``, replacing a previous run whole."""
-    previous = folder.with_name(f".{folder.name}.old")
-    shutil.rmtree(previous, ignore_errors=True)
+    previous = folder.with_name(f".{folder.name}.{uuid.uuid4().hex}.old")
     if folder.exists():
         folder.rename(previous)
     try:

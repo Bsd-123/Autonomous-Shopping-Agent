@@ -1,12 +1,13 @@
 """Tests for the canonical tables and the Parquet writer."""
 
 import shutil
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
 
 import polars as pl
 import pytest
 
+from canonical_support import RUN_AT, VERSION
 from shopping_agent.ingestion.adapters import OsherAdAdapter, RawFormatError
 from shopping_agent.ingestion.adapters.layout import SOURCE_TIME
 from shopping_agent.ingestion.canonical import (
@@ -20,12 +21,9 @@ from shopping_agent.ingestion.canonical import (
     build_prices,
     build_products,
     require_integrity,
-    write_canonical,
 )
 from support import OSHER_PRICES, OSHER_STORES, RAW, stage_fixture
 
-VERSION = "2026-11-15"
-RUN_AT = datetime(2026, 11, 15, 3, 0, tzinfo=UTC)
 CHAINS = ["maayan_2000", "osher_ad", "yesh_hesed"]
 
 
@@ -143,28 +141,6 @@ def test_ingestion_runs_has_one_row_per_chain(tables):
     assert runs["newest_source_timestamp"].null_count() == 0
 
 
-def test_write_canonical_writes_four_parquet_files_to_a_dated_folder(raw_dir, tmp_path):
-    folder = write_canonical(raw_dir, tmp_path / "canonical", VERSION, RUN_AT)
-
-    assert folder == tmp_path / "canonical" / "v=2026-11-15"
-    assert sorted(path.name for path in folder.iterdir()) == [
-        "ingestion_runs.parquet",
-        "prices.parquet",
-        "products.parquet",
-        "stores.parquet",
-    ]
-    for name, schema in SCHEMAS.items():
-        table = pl.read_parquet(folder / f"{name}.parquet")
-        assert dict(table.schema) == schema
-        assert table.height > 0
-
-
-def test_dataset_version_defaults_to_the_run_date(raw_dir, tmp_path):
-    folder = write_canonical(raw_dir, tmp_path / "canonical", ingestion_timestamp=RUN_AT)
-
-    assert folder.name == "v=2026-11-15"
-
-
 def test_published_times_keep_israel_time(tables):
     assert PRICES_SCHEMA["source_timestamp"] == SOURCE_TIME
     assert INGESTION_RUNS_SCHEMA["newest_source_timestamp"] == SOURCE_TIME
@@ -244,138 +220,6 @@ class TestIntegrity:
 
         with pytest.raises(CanonicalError, match=f"{table}.{column} has 1 null value"):
             require_integrity({**tables, table: broken})
-
-
-class TestWriteIsAtomic:
-    @staticmethod
-    def fail_on_the_third_write(monkeypatch):
-        writes = []
-        original = pl.DataFrame.write_parquet
-
-        def flaky(self, *args, **kwargs):
-            writes.append(1)
-            if len(writes) == 3:
-                raise OSError("disk full")
-            return original(self, *args, **kwargs)
-
-        monkeypatch.setattr(pl.DataFrame, "write_parquet", flaky)
-
-    def test_a_failed_new_version_leaves_nothing_behind(self, raw_dir, tmp_path, monkeypatch):
-        self.fail_on_the_third_write(monkeypatch)
-
-        with pytest.raises(OSError, match="disk full"):
-            write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
-
-        assert list(tmp_path.iterdir()) == []
-
-    def test_a_failed_rerun_keeps_the_previous_dataset_whole(self, raw_dir, tmp_path, monkeypatch):
-        write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
-        self.fail_on_the_third_write(monkeypatch)
-
-        with pytest.raises(OSError, match="disk full"):
-            write_canonical(raw_dir, tmp_path, VERSION, RUN_AT + timedelta(hours=6))
-
-        assert [path.name for path in tmp_path.iterdir()] == ["v=2026-11-15"]
-        for name in ("prices", "ingestion_runs"):
-            table = pl.read_parquet(tmp_path / "v=2026-11-15" / f"{name}.parquet")
-            assert table["ingestion_timestamp"].unique().to_list() == [RUN_AT]
-
-    def test_a_rerun_replaces_every_file_of_the_dataset(self, raw_dir, tmp_path):
-        later = RUN_AT + timedelta(hours=6)
-        write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
-
-        write_canonical(raw_dir, tmp_path, VERSION, later)
-
-        assert [path.name for path in tmp_path.iterdir()] == ["v=2026-11-15"]
-        for name in ("prices", "ingestion_runs"):
-            table = pl.read_parquet(tmp_path / "v=2026-11-15" / f"{name}.parquet")
-            assert table["ingestion_timestamp"].unique().to_list() == [later]
-
-    def test_a_failed_swap_restores_the_previous_dataset(self, raw_dir, tmp_path, monkeypatch):
-        write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
-        original = Path.rename
-
-        def refuse_staging(self, target):
-            if self.name.endswith(".tmp"):
-                raise OSError("rename failed")
-            return original(self, target)
-
-        monkeypatch.setattr(Path, "rename", refuse_staging)
-
-        with pytest.raises(OSError, match="rename failed"):
-            write_canonical(raw_dir, tmp_path, VERSION, RUN_AT + timedelta(hours=6))
-
-        assert [path.name for path in tmp_path.iterdir()] == ["v=2026-11-15"]
-        prices = pl.read_parquet(tmp_path / "v=2026-11-15" / "prices.parquet")
-        assert prices["ingestion_timestamp"].unique().to_list() == [RUN_AT]
-
-    def test_a_failed_swap_of_a_new_version_leaves_nothing_behind(
-        self, raw_dir, tmp_path, monkeypatch
-    ):
-        original = Path.rename
-
-        def refuse_staging(self, target):
-            if self.name.endswith(".tmp"):
-                raise OSError("rename failed")
-            return original(self, target)
-
-        monkeypatch.setattr(Path, "rename", refuse_staging)
-
-        with pytest.raises(OSError, match="rename failed"):
-            write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
-
-        assert list(tmp_path.iterdir()) == []
-
-    def test_no_version_folder_is_visible_while_the_files_are_written(
-        self, raw_dir, tmp_path, monkeypatch
-    ):
-        seen = []
-        original = pl.DataFrame.write_parquet
-
-        def spy(self, file, *args, **kwargs):
-            seen.append(sorted(path.name for path in tmp_path.iterdir()))
-            return original(self, file, *args, **kwargs)
-
-        monkeypatch.setattr(pl.DataFrame, "write_parquet", spy)
-
-        write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
-
-        assert seen and all(not name.startswith("v=") for names in seen for name in names)
-
-
-class TestDatasetVersion:
-    @pytest.mark.parametrize("version", ["2026-11-15", "2026-11-15.2", "rc_1", "7"])
-    def test_a_plain_token_is_accepted(self, raw_dir, version):
-        assert build_canonical(raw_dir, version, RUN_AT)["prices"]["dataset_version"][0] == version
-
-    @pytest.mark.parametrize("version", ["", " ", "a b", "../x", "a/b", "a\\b", ".hidden", "-x"])
-    def test_anything_else_is_rejected_before_a_file_is_written(self, raw_dir, tmp_path, version):
-        with pytest.raises(CanonicalError, match="invalid dataset version"):
-            write_canonical(raw_dir, tmp_path / "out", version, RUN_AT)
-
-        assert not (tmp_path / "out").exists()
-
-    def test_the_default_is_the_utc_date_of_the_run(self, raw_dir, tmp_path):
-        # 00:30 in Israel is still the day before in UTC.
-        israel = timezone(timedelta(hours=2))
-
-        folder = write_canonical(
-            raw_dir, tmp_path, ingestion_timestamp=datetime(2026, 11, 15, 0, 30, tzinfo=israel)
-        )
-
-        assert folder.name == "v=2026-11-14"
-
-
-class TestIngestionTimestamp:
-    def test_a_timestamp_without_a_time_zone_is_rejected(self, raw_dir, tmp_path):
-        naive = datetime(2026, 11, 15, 3, 0)
-
-        with pytest.raises(CanonicalError, match="timezone-aware"):
-            build_canonical(raw_dir, VERSION, naive)
-        with pytest.raises(CanonicalError, match="timezone-aware"):
-            build_prices(OsherAdAdapter().read_prices(RAW), VERSION, naive)
-        with pytest.raises(CanonicalError, match="timezone-aware"):
-            write_canonical(raw_dir, tmp_path, ingestion_timestamp=naive)
 
 
 def test_products_choose_between_listings_published_together_by_store():
