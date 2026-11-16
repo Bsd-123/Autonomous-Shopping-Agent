@@ -10,6 +10,7 @@ from typing import Annotated, Literal, Self
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     PlainSerializer,
@@ -47,12 +48,27 @@ class Attribute(BaseModel):
 
     ``strict`` says whether a product must match the value. Every attribute is
     strict in Phase 1; the flag exists so soft preferences need no schema change.
+
+    The value keeps its type, but equality follows Python: ``True`` equals ``1``
+    and ``3`` equals ``3.0``.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     value: AttributeValue
     strict: bool = Field(default=True, strict=True)
+
+
+def _reject_repeated_names(raw: object) -> object:
+    """Fail when two attribute names differ only by surrounding whitespace.
+
+    Names are stripped on validation, so the second would silently replace the first.
+    """
+    if isinstance(raw, Mapping):
+        names = [name.strip() for name in raw if isinstance(name, str)]
+        if len(set(names)) != len(names):
+            raise ValueError("attribute names repeat once surrounding whitespace is removed")
+    return raw
 
 
 class ReadOnlyAttributes(Mapping[str, Attribute]):
@@ -106,6 +122,7 @@ class ParsedItem(BaseModel):
     total_quantity: Quantity | None = None
     attributes: Annotated[
         Mapping[Text, Attribute],
+        BeforeValidator(_reject_repeated_names),
         Field(max_length=MAX_ATTRIBUTES),
         AfterValidator(ReadOnlyAttributes),
         PlainSerializer(dict, return_type=dict[str, Attribute]),

@@ -6,12 +6,15 @@ import pickle
 import pytest
 from pydantic import ValidationError
 
-from shopping_agent.contracts import Attribute, ParsedItem, Quantity
-from shopping_agent.contracts.parsed_item import (
+from shopping_agent import contracts
+from shopping_agent.contracts import (
     MAX_ATTRIBUTES,
     MAX_COUNT,
     MAX_QUANTITY,
     MAX_TEXT_LENGTH,
+    Attribute,
+    ParsedItem,
+    Quantity,
 )
 
 ARCHITECTURE_EXAMPLE = {
@@ -254,3 +257,67 @@ class TestAttributesAreReadOnly:
         assert repr(item.attributes) == (
             "ReadOnlyAttributes({'brand': Attribute(value='Tnuva', strict=True)})"
         )
+
+
+class TestAttributeNames:
+    @pytest.mark.parametrize(
+        "names", [("brand", " brand"), ("brand", "brand "), (" brand ", "brand")]
+    )
+    def test_names_that_differ_only_by_whitespace_are_rejected(self, names):
+        attributes = {name: {"value": "Tnuva"} for name in names}
+
+        with pytest.raises(ValidationError, match="attribute names repeat"):
+            ParsedItem(item="milk", attributes=attributes)
+
+    def test_the_rule_applies_to_json_too(self):
+        payload = (
+            '{"item": "milk", "attributes": {"brand": {"value": "a"}, "brand ": {"value": "b"}}}'
+        )
+
+        with pytest.raises(ValidationError, match="attribute names repeat"):
+            ParsedItem.model_validate_json(payload)
+
+    def test_a_padded_name_is_stripped(self):
+        item = ParsedItem(item="milk", attributes={" brand ": {"value": "Tnuva"}})
+
+        assert list(item.attributes) == ["brand"]
+
+    def test_different_names_are_all_kept(self):
+        attributes = {"brand": {"value": "Tnuva"}, "fat_pct": {"value": 3}}
+
+        assert list(ParsedItem(item="milk", attributes=attributes).attributes) == [
+            "brand",
+            "fat_pct",
+        ]
+
+
+class TestAttributeEquality:
+    def test_the_type_is_kept_but_equality_follows_python(self):
+        flag, number = Attribute(value=True), Attribute(value=1)
+
+        assert (type(flag.value), type(number.value)) == (bool, int)
+        assert flag == number
+        assert hash(flag) == hash(number)
+        assert Attribute(value=3) == Attribute(value=3.0)
+
+
+def test_the_package_exports_what_other_steps_need():
+    assert set(contracts.__all__) == {
+        "MAX_ATTRIBUTES",
+        "MAX_COUNT",
+        "MAX_QUANTITY",
+        "MAX_TEXT_LENGTH",
+        "Attribute",
+        "ParsedItem",
+        "Quantity",
+        "ReadOnlyAttributes",
+        "Unit",
+    }
+    assert all(hasattr(contracts, name) for name in contracts.__all__)
+    assert isinstance(ParsedItem(item="milk").attributes, contracts.ReadOnlyAttributes)
+
+
+@pytest.mark.parametrize("attributes", [["brand"], "brand", 3, None])
+def test_attributes_must_be_an_object(attributes):
+    with pytest.raises(ValidationError):
+        ParsedItem.model_validate({"item": "milk", "attributes": attributes})
