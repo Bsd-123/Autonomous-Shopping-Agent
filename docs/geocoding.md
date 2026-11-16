@@ -4,14 +4,18 @@ Stores get their coordinates during ingestion (architecture section 4.7). Nothin
 
 ```python
 from shopping_agent.ingestion.geocoding import (
-    NominatimGeocoder, geocode_stores, geocode_report, read_overrides, with_coordinates,
+    NominatimGeocoder,
+    geocode_stores,
+    geocode_report,
+    read_overrides,
+    with_coordinates,
 )
 
-geocoder = NominatimGeocoder(user_agent)          # an identifying User-Agent, set by the operator
+geocoder = NominatimGeocoder(user_agent)  # an identifying User-Agent, set by the operator
 overrides = read_overrides(Path("config/geocode_overrides.csv"))
 stores = geocode_stores(stores, geocoder, previous=last_run_stores, overrides=overrides)
-report = geocode_report(stores)                   # per chain, for the data-quality report
-stores = with_coordinates(stores)                 # stores without coordinates are left out
+report = geocode_report(stores)  # per chain, for the data-quality report
+stores = with_coordinates(stores)  # stores without coordinates are left out
 ```
 
 ## What each store gets
