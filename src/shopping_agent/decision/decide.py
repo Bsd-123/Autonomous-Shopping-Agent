@@ -16,6 +16,7 @@ from shopping_agent.decision._enumeration import (
     SubsetTable,
     evaluate_subsets,
 )
+from shopping_agent.decision._options import Option, choose_options
 from shopping_agent.decision.config import DecisionConfig
 
 
@@ -23,13 +24,25 @@ from shopping_agent.decision.config import DecisionConfig
 class Decision:
     """The outcome of ``decide()``.
 
+    ``options`` holds up to three baskets, one per store count, from the fewest
+    stores to the most; an option that a smaller one matches or beats is left
+    out. ``recommended`` is the index in ``options`` of the option that fulfils
+    the most items and, among those, costs the least; it is ``None`` when there
+    are no options.
+
     ``subsets`` holds every subset of one to three stores in which each store
     supplies at least one item. ``evaluated`` counts all the subsets that were
     looked at, including those left out for an idle store.
     """
 
+    options: tuple[Option, ...]
+    recommended: int | None
     subsets: SubsetTable
     evaluated: int
+
+    @property
+    def recommended_option(self) -> Option | None:
+        return None if self.recommended is None else self.options[self.recommended]
 
 
 def _checked_cost(cost: ArrayLike, store_count: int) -> np.ndarray:
@@ -56,7 +69,7 @@ def decide(
     *,
     config: DecisionConfig | None = None,
 ) -> Decision:
-    """Evaluate every way of buying the basket from one, two or three stores.
+    """Choose the best basket for one, two and three stores.
 
     ``cost[i, s]`` is the cost in whole agorot of item ``i`` at store ``s``, or
     ``NOT_LISTED`` when the store does not list it. ``home`` and ``stores`` are
@@ -74,4 +87,6 @@ def decide(
         penalty_agorot=config.penalty_agorot,
         travel_agorot_per_km=config.travel_agorot_per_km,
     )
-    return Decision(subsets=table.where(~table.has_idle_store), evaluated=len(table))
+    kept = table.where(~table.has_idle_store)
+    options, recommended = choose_options(kept, matrix, home, stores, config)
+    return Decision(options=options, recommended=recommended, subsets=kept, evaluated=len(table))

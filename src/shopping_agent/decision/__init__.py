@@ -4,6 +4,7 @@ The engine is reached through ``decide()`` only.
 """
 
 from shopping_agent.decision._enumeration import MAX_STORES, NO_STORE, NOT_LISTED, SubsetTable
+from shopping_agent.decision._options import Option
 from shopping_agent.decision.config import (
     DEFAULT_PENALTY_AGOROT,
     DEFAULT_TRAVEL_AGOROT_PER_KM,
@@ -35,6 +36,7 @@ __all__ = [
     "ConfigError",
     "Decision",
     "DecisionConfig",
+    "Option",
     "Point",
     "SubsetTable",
     "Tour",
