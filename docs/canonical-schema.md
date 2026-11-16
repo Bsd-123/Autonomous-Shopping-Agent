@@ -18,7 +18,16 @@ Build it with:
 uv run python -m shopping_agent.ingestion --raw data/raw --out data/canonical
 ```
 
-`dataset_version` is the run date in UTC (`2026-11-15`) unless `--version` is given.
+`dataset_version` is the run date in UTC (`2026-11-15`) unless `--dataset-version` is given. It becomes a folder name and an image tag, so it may only contain letters, digits, `.`, `_` and `-`, and must start with a letter or a digit.
+
+## Guarantees
+
+A run either writes a complete dataset or writes nothing. A problem in the data or the settings is reported as a one-line error with exit code 1:
+
+- **The folder appears whole or not at all.** The files are written to a hidden folder next to `v=<dataset_version>` and moved into place once all four exist. A failed run leaves nothing behind, and a failed re-run of the same version keeps the previous dataset intact.
+- **Keys exist and are unique:** `products.product_key` and `stores.store_id` have no nulls and no repeats. A listing without an item code fails the run.
+- **Every price points at a row:** `prices.product_key` is in `products` and `prices.store_id` is in `stores`. A price row for a store that is missing from the store file fails the run.
+- **`ingestion_timestamp` must carry a time zone.**
 
 ## Status of columns
 
