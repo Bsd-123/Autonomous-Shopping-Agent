@@ -69,7 +69,7 @@ One row per listing found in the price files. The same product can appear more t
 |---|---|---|---|
 | `product_key` | string | as in `products` | Interim |
 | `store_id` | string | `<chain>:<store number>` | Final |
-| `price_agorot` | integer | `itemprice` × 100, exact (prices have at most two decimals) | Interim: the per-kilogram rule for weighed items comes with the agorot step |
+| `price_agorot` | integer | `itemprice` × 100, exact (prices have at most two decimals). Per pack; per kilogram when the product's `is_weighed` is true | Final |
 | `price_flag` | string | `ok` | Interim: cleaning sets `carried_forward` |
 | `last_seen_date` | date | Israeli date of `source_timestamp` | Final |
 | `source_timestamp` | timestamp (Israel time) | publish time in the price file's name | Final |
@@ -77,6 +77,10 @@ One row per listing found in the price files. The same product can appear more t
 | `dataset_version` | string | the run's version | Final |
 
 **Freshness:** `source_timestamp` is when the chain published the price file, taken from the date and time at the end of the file name (`Price…-20261114-090012.xml`), in Israel local time (`Asia/Jerusalem`), which the column keeps. The per-item `priceupdatetime` in the source is the last price change and is often years old, so it is not used for freshness. `last_seen_date` is the Israeli date the listing was last seen in a published file (a file published at 00:30 in Israel belongs to that day, although it is still the day before in UTC), and the staleness cutoff applies to it.
+
+**Money:** every price is a whole number of agorot, and no money column is a float. A money column is named with `_agorot`. For a weighed product (`products.is_weighed`) the price is per kilogram, which is how the chains publish it. No unit price is stored: it is computed at query time and used only as a tie-breaker. `shopping_agent.ingestion.money.require_integer_money` checks these rules on every run and stops it when a table breaks one.
+
+A few weighed products state `100 גרם` as their unit of measure (4 of 2,395 in the files of 2026-11-14/15). The file does not say whether their price is per 100 grams or per kilogram, so it is stored as published; `weighed_not_per_kilogram` lists them for checking.
 
 ## `stores`
 

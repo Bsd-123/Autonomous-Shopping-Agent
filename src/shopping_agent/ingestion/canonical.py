@@ -17,6 +17,7 @@ import polars as pl
 
 from shopping_agent.ingestion.adapters import ADAPTERS, ChainAdapter
 from shopping_agent.ingestion.adapters.layout import SOURCE_TIME
+from shopping_agent.ingestion.money import require_integer_money
 
 PRICE_FLAG_OK = "ok"
 PRICE_FLAG_CARRIED_FORWARD = "carried_forward"
@@ -253,6 +254,7 @@ def build_canonical(
         ),
     }
     require_integrity(tables)
+    require_integer_money(tables)
     return tables
 
 
