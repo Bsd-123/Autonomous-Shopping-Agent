@@ -1,0 +1,290 @@
+# Category default profiles (architecture section 3.1).
+#
+# One profile per high-frequency household staple. Each profile has:
+#   keywords          a product or list item belongs to the category when its name starts with one
+#   exclude_keywords  ...and none of these words appears in it
+#   defaults          attribute values assumed when the user did not state them (hard filters)
+#   free              attributes where any value is accepted, so the cheapest wins
+#   typical_pack      the usual pack, in ml, g or unit
+# A weighed category (sold by the kilogram) also has:
+#   weighed: true
+#   typical_unit_weight   the weight of one piece, in g
+#
+# The file is checked by shopping_agent.semantics.profiles; see docs/category-profiles.md.
+
+# --- Dairy and eggs ---------------------------------------------------------
+
+milk:
+  keywords: [חלב]
+  exclude_keywords: [סויה, קוקוס, שוקולד, אבקת, עיזים, מרוכז, שקדים, שיבולת, אורז, וניל, להקצפה, עזים, לוז, קפה, בטעם]
+  defaults: {animal: cow, flavor: plain, storage: fresh}
+  free: [fat_pct, brand]
+  typical_pack: {value: 1000, unit: ml}
+
+cottage:
+  keywords: [קוטג', קוטג]
+  exclude_keywords: [זיתים, שום, שמיר, בצל]
+  defaults: {flavor: plain}
+  free: [fat_pct, brand]
+  typical_pack: {value: 250, unit: g}
+
+yogurt:
+  keywords: [יוגורט]
+  exclude_keywords: [עיזים, כבשים, לשתייה, לשתיה, יווני, תות, אפרסק, וניל, שוקולד, קיווי, פקאן, מוזלי, גרנולה, מנגו, אננס, קפה, אשכולית, קוקוס, בטעם]
+  defaults: {animal: cow, flavor: plain}
+  free: [fat_pct, brand]
+  typical_pack: {value: 200, unit: g}
+
+white_cheese:
+  keywords: [גבינה לבנה]
+  exclude_keywords: [עיזים]
+  defaults: {animal: cow, flavor: plain}
+  free: [fat_pct, brand]
+  typical_pack: {value: 250, unit: g}
+
+yellow_cheese:
+  keywords: [גבינה צהובה, גבינת עמק, גבינה עמק]
+  exclude_keywords: [מגורדת, עיזים]
+  defaults: {animal: cow}
+  free: [fat_pct, brand]
+  typical_pack: {value: 200, unit: g}
+
+cream_cheese:
+  keywords: [גבינת שמנת]
+  exclude_keywords: [זיתים, שום, שמיר, בצל, ירקות, כמהין, עשבי, זעתר, צ'ילי, עירית, פלפל, זיתי]
+  defaults: {flavor: plain}
+  free: [fat_pct, brand]
+  typical_pack: {value: 200, unit: g}
+
+butter:
+  keywords: [חמאה]
+  exclude_keywords: [מלוחה, שום, בוטנים]
+  defaults: {flavor: plain}
+  free: [fat_pct, brand]
+  typical_pack: {value: 200, unit: g}
+
+eggs:
+  keywords: [ביצים]
+  exclude_keywords: [שוקולד, הפתעה, שליו]
+  defaults: {animal: chicken}
+  free: [size, brand]
+  typical_pack: {value: 12, unit: unit}
+
+# --- Bakery -----------------------------------------------------------------
+
+bread:
+  keywords: [לחם]
+  exclude_keywords: [גלוטן, מצות, ל.גלוטן]
+  defaults: {gluten_free: false}
+  free: [grain, brand]
+  typical_pack: {value: 750, unit: g}
+
+pita:
+  keywords: [פיתות, פיתה]
+  exclude_keywords: [גלוטן, ביס, ל.גלוטן, זעתר]
+  defaults: {gluten_free: false}
+  free: [grain, brand]
+  typical_pack: {value: 10, unit: unit}
+
+challah:
+  keywords: [חלה]
+  exclude_keywords: [גלוטן, מיני]
+  defaults: {gluten_free: false}
+  free: [flavor, brand]
+  typical_pack: {value: 500, unit: g}
+
+# --- Pantry -----------------------------------------------------------------
+
+rice:
+  keywords: [אורז]
+  exclude_keywords: [מלא, ריזוטו, לסושי, מוקפץ]
+  defaults: {grain: white}
+  free: [variety, brand]
+  typical_pack: {value: 1000, unit: g}
+
+pasta:
+  keywords: [פסטה, ספגטי]
+  exclude_keywords: [גלוטן, רוטב, מלאה, כוסמין]
+  defaults: {grain: white, gluten_free: false}
+  free: [shape, brand]
+  typical_pack: {value: 500, unit: g}
+
+flour:
+  keywords: [קמח]
+  exclude_keywords: [שקדים, מצה, מצות, כוסמין, תפו"א, תירס, קוקוס, אורז, חומוס, שיפון, מלא, שקד, גלוטן, ל.גלוטן, לל"ג, שועל, תפוחי]
+  defaults: {grain: wheat, gluten_free: false}
+  free: [brand]
+  typical_pack: {value: 1000, unit: g}
+
+sugar:
+  keywords: [סוכר]
+  exclude_keywords: [וניל, חום, דמררה, קוביות, קוקוס, כהה, אבקת, ענבים]
+  defaults: {color: white}
+  free: [brand]
+  typical_pack: {value: 1000, unit: g}
+
+salt:
+  keywords: [מלח]
+  exclude_keywords: [לימון, למדיח, אמבט]
+  defaults: {flavor: plain}
+  free: [grind, brand]
+  typical_pack: {value: 1000, unit: g}
+
+oil:
+  keywords: [שמן]
+  exclude_keywords: [זית, למאור, פרפין, פרופין, טיפולי, שומשום, קוקוס, אבוקדו, לתינוק, ענבים, אגוזים, צ'ילי, מתובל, תינוקות, בייבי, תרסיס]
+  defaults: {use: cooking}
+  free: [source, brand]
+  typical_pack: {value: 1000, unit: ml}
+
+olive_oil:
+  keywords: [שמן זית]
+  exclude_keywords: [למאור, טיפולי, להדלקת, תרסיס]
+  defaults: {use: cooking}
+  free: [grade, brand]
+  typical_pack: {value: 750, unit: ml}
+
+tuna:
+  keywords: [טונה]
+  exclude_keywords: [סלט, אדומה, מעושן, מעושנת, בעישון, סטייק]
+  defaults: {form: canned}
+  free: [packed_in, brand]
+  typical_pack: {value: 560, unit: g}
+
+tomato_paste:
+  keywords: [רסק עגבניות]
+  exclude_keywords: [רוטב]
+  defaults: {flavor: plain}
+  free: [concentration, brand]
+  typical_pack: {value: 260, unit: g}
+
+tahini:
+  keywords: [טחינה]
+  exclude_keywords: [חציל, מתובלת, חריפה, מוכנה, סלט, שמיר, חריף]
+  defaults: {form: raw}
+  free: [grain, brand]
+  typical_pack: {value: 500, unit: g}
+
+instant_coffee:
+  keywords: [קפה נמס]
+  exclude_keywords: [וניל, קרמל, לוז, מוקה, נטול]
+  defaults: {flavor: plain, caffeine: regular}
+  free: [brand]
+  typical_pack: {value: 200, unit: g}
+
+turkish_coffee:
+  keywords: [קפה טורקי, קפה שחור]
+  exclude_keywords: [נטול]
+  defaults: {caffeine: regular}
+  free: [flavor, brand]
+  typical_pack: {value: 200, unit: g}
+
+tea:
+  keywords: [תה]
+  exclude_keywords: [ירוק, קמומיל, נענע, צמחים, פירות, מנגו, צ'אי, מסאלה, לימונית, יסמין, קר, מעושן, ספרינג, חליטת, נמס, מנטה, לימונענע, תפוח]
+  defaults: {type: black, flavor: plain}
+  free: [brand]
+  typical_pack: {value: 25, unit: unit}
+
+# --- Drinks -----------------------------------------------------------------
+
+water:
+  keywords: [מים]
+  exclude_keywords: [פה, קוקוס, בטעם, טעם, סודה, מוגז, מוגזים, ורדים, מיסלריים, מיצלריים, מזוקקים]
+  defaults: {carbonated: false, flavor: plain}
+  free: [brand]
+  typical_pack: {value: 1500, unit: ml}
+
+# --- Fruit and vegetables (sold by the kilogram) ----------------------------
+
+tomatoes:
+  keywords: [עגבניה, עגבנייה, עגבניות]
+  exclude_keywords: [רסק, מיובשות, מרוסקות, חתוכות, קצוצות, מקולפות, שרי, קוביות, שלמות, במיץ, רוטב, תרכיז, לשקשוקה]
+  defaults: {form: fresh}
+  free: [variety]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 120, unit: g}
+
+cucumbers:
+  keywords: [מלפפון, מלפפונים]
+  exclude_keywords: [במלח, בחומץ, חמוץ, חמוצים, כבושים, קורנישון, קורנישונים, פיקלס, בייבי, חומץ, מלח, במי, מיני]
+  defaults: {form: fresh}
+  free: [variety]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 100, unit: g}
+
+onions:
+  keywords: [בצל]
+  exclude_keywords: [ירוק, מטוגן, קצוץ, אבקת, ממולא]
+  defaults: {form: fresh}
+  free: [color]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 150, unit: g}
+
+potatoes:
+  keywords: [תפוח אדמה, תפוחי אדמה, תפו"א]
+  exclude_keywords: [צ'יפס, לצ'יפס, פירה, קפוא, סנפרוסט, למיקרו, למיקרוגל]
+  defaults: {form: fresh}
+  free: [color]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 200, unit: g}
+
+carrots:
+  keywords: [גזר]
+  exclude_keywords: [מגורד, מרוקאי, גמדי, קצוץ, דק, דקיק, חתוך, פיקנטי, ברוטב, סנפרוסט, קפוא]
+  defaults: {form: fresh}
+  free: [variety]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 80, unit: g}
+
+peppers:
+  keywords: [פלפל]
+  exclude_keywords: [שחור, לבן, חריף, גרוס, טחון, שיפקה, שיפקונית, צילי, צ'ילי, קלוי, כבוש, שאטה, אנגלי, טינקרבל, ארבע, שטה, כתוש, ממולא, צומה, צ'ומה, יבש, חלפיניו]
+  defaults: {form: fresh}
+  free: [color]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 160, unit: g}
+
+bananas:
+  keywords: [בננה, בננות]
+  exclude_keywords: [ציפס, צ'יפס, מיובשת, מיובשות]
+  defaults: {form: fresh}
+  free: [variety]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 150, unit: g}
+
+apples:
+  keywords: [תפוח עץ, תפוחי עץ, תפוחים]
+  exclude_keywords: [יבש, מיובשים, רסק, מיץ, חומץ]
+  defaults: {form: fresh}
+  free: [variety]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 180, unit: g}
+
+# --- Meat -------------------------------------------------------------------
+
+chicken_breast:
+  keywords: [חזה עוף]
+  exclude_keywords: [מעושן, פסטרמה, טחון, שניצל, קפוא]
+  defaults: {storage: fresh}
+  free: [brand, kashrut]
+  typical_pack: {value: 1000, unit: g}
+  weighed: true
+  typical_unit_weight: {value: 250, unit: g}
+
+# --- Household --------------------------------------------------------------
+
+toilet_paper:
+  keywords: [נייר טואלט]
+  exclude_keywords: [לח]
+  defaults: {type: dry}
+  free: [ply, brand]
+  typical_pack: {value: 32, unit: unit}
