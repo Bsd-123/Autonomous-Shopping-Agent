@@ -17,7 +17,7 @@ The dataset holds one folder per chain. Each folder has CSV files converted from
 
 | Chain | Adapter | Dataset folder | Notes |
 |---|---|---|---|
-| Yesh Hesed | `YeshHesedAdapter` | `shufersal` | A sub-chain inside Shufersal's files (`subchainname` = `יש חסד`). The adapter keeps only its stores and their prices. |
+| Yesh Hesed | `YeshHesedAdapter` | `shufersal` | A sub-chain inside Shufersal's files (`subchainname` = `יש חסד`). The adapter keeps only its stores and their prices. Rows of other sub-chains are dropped before parsing, so only their store numbers are validated. |
 | Osher Ad | `OsherAdAdapter` | `osherad` | Writes `לא ידוע` where a value is unknown. |
 | Maayan 2000 | `Maayan2000Adapter` | `maayan2000` | Writes `לא ידוע` or `XXXXX` where a value is unknown. |
 
@@ -43,6 +43,8 @@ Every adapter returns two frames with the same columns and types for all chains,
 - `store_id` is `<chain>:<store number>`, with leading zeros removed, so it is unique across chains.
 - `city` is the raw value from the file, usually a Central Bureau of Statistics locality code (Bnei Brak is `6100`).
 - `price` is the shelf price in shekels as published. Conversion to integer agorot, cleaning, unit normalization and the canonical tables are later pipeline steps.
+- `source_timestamp` is Israel local time (`Asia/Jerusalem`). The files carry no UTC offset, so this is an assumption about how the chains publish; it keeps the timestamps comparable with timezone-aware "now" values in the data-quality report. A time that does not exist (the hour skipped when clocks go forward) raises `RawFormatError`; a repeated hour is read as the earlier one.
+- The store files can hold several daily snapshots. The adapters keep the newest one, chosen by parsed time. Every snapshot row is validated, including older ones.
 - Adapters return every row found in the price files, including repeated listings of the same item; duplicates are resolved in the cleaning step.
 - A value that is present but does not parse (a store number, price, quantity, weighed flag or timestamp), or a store row without an update time, raises `RawFormatError`. It never becomes a silent null. Prices must have at most two decimal places.
 

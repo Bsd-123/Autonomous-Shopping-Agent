@@ -9,7 +9,7 @@ from pathlib import Path
 
 import polars as pl
 
-from shopping_agent.ingestion.adapters.base import ChainAdapter
+from shopping_agent.ingestion.adapters.base import ChainAdapter, require_parsed
 
 SUB_CHAIN_NAME = "יש חסד"
 
@@ -22,6 +22,20 @@ class YeshHesedAdapter(ChainAdapter):
     def select_raw_stores(self, raw: pl.DataFrame) -> pl.DataFrame:
         return raw.filter(pl.col("subchainname") == SUB_CHAIN_NAME)
 
-    def read_prices(self, raw_dir: Path) -> pl.DataFrame:
-        stores = self.read_stores(raw_dir).select("store_id")
-        return super().read_prices(raw_dir).join(stores, on="store_id", how="semi")
+    def read_prices(self, raw_dir: Path, stores: pl.DataFrame | None = None) -> pl.DataFrame:
+        """Read the prices of the Yesh Hesed stores.
+
+        Pass the frame from ``read_stores`` as ``stores`` to avoid reading the
+        store file a second time.
+        """
+        if stores is None:
+            stores = self.read_stores(raw_dir)
+        # Other sub-chains hold about 94% of the rows. They are dropped before
+        # parsing, so they cost no memory and only their store numbers are
+        # validated: a row whose number cannot be read could belong to any store.
+        raw = self._read_raw_prices(raw_dir)
+        store_ids = raw.select(store_id=self._store_id())
+        require_parsed(raw, store_ids, {"store_id": "storeid"})
+        return self._parse_prices(
+            raw.filter(store_ids["store_id"].is_in(stores["store_id"].implode()))
+        )

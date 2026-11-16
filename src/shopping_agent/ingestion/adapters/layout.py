@@ -6,6 +6,10 @@ columns and types, so the later pipeline steps see a single layout.
 
 import polars as pl
 
+# The files carry no UTC offset; the chains publish Israel local time.
+ISRAEL_TIME_ZONE = "Asia/Jerusalem"
+SOURCE_TIME = pl.Datetime("ms", ISRAEL_TIME_ZONE)
+
 PRICE_SCHEMA = pl.Schema(
     {
         "chain": pl.String(),
@@ -19,7 +23,7 @@ PRICE_SCHEMA = pl.Schema(
         "unit_of_measure": pl.String(),
         "qty_in_package": pl.Float64(),
         "price": pl.Decimal(12, 2),
-        "source_timestamp": pl.Datetime("ms"),
+        "source_timestamp": SOURCE_TIME,
         "source_file": pl.String(),
     }
 )
@@ -32,7 +36,7 @@ STORE_SCHEMA = pl.Schema(
         "address": pl.String(),
         "city": pl.String(),
         "zipcode": pl.String(),
-        "source_timestamp": pl.Datetime("ms"),
+        "source_timestamp": SOURCE_TIME,
         "source_file": pl.String(),
     }
 )
