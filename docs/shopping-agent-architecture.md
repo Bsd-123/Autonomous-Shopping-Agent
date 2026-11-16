@@ -39,7 +39,7 @@ The user writes a shopping list in natural language and gives a location. The sy
 | Scale | Portfolio / academic demo first; small public beta later. |
 | Data source | Kaggle CSV snapshot, refreshed daily, subject to the Phase 0 check. |
 | Interface | Simple web app. |
-| Phase 1 scope | Bnei Brak, with three chains: Yesh Hesed, Osher Ad and Netiv HaHesed. |
+| Phase 1 scope | Bnei Brak, with three chains: Yesh Hesed, Osher Ad and Maayan 2000. |
 | LLM | Small paid API, one call per shopping list. |
 
 ### Non-functional targets and defaults (proposals)
@@ -417,7 +417,7 @@ The Semantics workstream authors and maintains the profiles and the labelled cas
 | Phase | Adds | Notes |
 |---|---|---|
 | 0. Gate | Kaggle check (update cadence, licence, promotion and store files, category column, presence of the three Phase 1 chains and their Bnei Brak branches); half-day spike on one or two chains' official files; one-page semantics spec | Ingestion adapters can start in parallel. |
-| 1. Core MVP | Yesh Hesed, Osher Ad and Netiv HaHesed in Bnei Brak; full pipeline and request flow as described; web page with list input, clarify choices, basket options and a map; traces; evaluation suites | Focus: data reliability, matching accuracy, mathematical correctness. |
+| 1. Core MVP | Yesh Hesed, Osher Ad and Maayan 2000 in Bnei Brak; full pipeline and request flow as described; web page with list input, clarify choices, basket options and a map; traces; evaluation suites | Focus: data reliability, matching accuracy, mathematical correctness. |
 | 2. Full coverage and simple promotions | Adapters for all chains; unconditional single-item discounts; cross-chain barcode mismatch report; float16 matrix; data-quality dashboard | Club-only promotions are excluded at first. |
 | 3. Better matching | Trained reranker from Phase 1 logs; soft preferences via `strict: false`; two-tier substitutions; calibrated confidence thresholds | Substitution rules are in 3.4. |
 | 4. Multi-buy promotions | "3 for 20", "2nd at 50%"; CP-SAT behind the `decide()` interface | Basket-threshold promotions come last and may not be worth it. |
