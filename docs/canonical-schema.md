@@ -24,7 +24,7 @@ uv run python -m shopping_agent.ingestion --raw data/raw --out data/canonical
 
 A run either writes a complete dataset or writes nothing. A problem in the data or the settings is reported as a one-line error with exit code 1:
 
-- **The folder appears whole or not at all.** The files are written to a hidden folder of the run's own (`.v=<dataset_version>.<random>.tmp`) next to `v=<dataset_version>` and moved into place once all four exist. A failed run leaves nothing behind, and a failed re-run of the same version keeps the previous dataset. Two runs of the same version cannot mix their files; the one that finishes last wins.
+- **The folder appears whole or not at all.** The files are written to a hidden folder of the run's own (`.v=<dataset_version>.<random>.tmp`) next to `v=<dataset_version>` and moved into place once all four exist. A failed run leaves nothing behind, and a failed re-run of the same version keeps the previous dataset. Two runs of the same version cannot mix their files: one complete dataset is published, and the other run may fail with an error if both replace it at the same moment.
 - **Replacing a dataset is two renames, not one atomic step.** For a moment `v=<dataset_version>` does not exist, and a crash right then leaves the previous dataset in a hidden `.v=<dataset_version>.<random>.old` folder. A reader that needs a name that is always valid should follow a version pointer, not the folder name. Hidden `.tmp` and `.old` folders left by a killed run can be deleted.
 - **Keys exist and are unique:** `products.product_key` and `stores.store_id` have no nulls and no repeats. A listing without an item code fails the run.
 - **Every price points at a row:** `prices.product_key` is in `products` and `prices.store_id` is in `stores`. A price row for a store that is missing from the store file fails the run for Osher Ad and Maayan 2000. Yesh Hesed shares Shufersal's files, so it leaves out the rows of stores it does not list, because they belong to other sub-chains.
@@ -69,7 +69,7 @@ One row per listing found in the price files. The same product can appear more t
 |---|---|---|---|
 | `product_key` | string | as in `products` | Interim |
 | `store_id` | string | `<chain>:<store number>` | Final |
-| `price_agorot` | integer | `itemprice` × 100, rounded | Interim: the per-kilogram rule for weighed items comes with the agorot step |
+| `price_agorot` | integer | `itemprice` × 100, exact (prices have at most two decimals) | Interim: the per-kilogram rule for weighed items comes with the agorot step |
 | `price_flag` | string | `ok` | Interim: cleaning sets `carried_forward` |
 | `last_seen_date` | date | Israeli date of `source_timestamp` | Final |
 | `source_timestamp` | timestamp (Israel time) | publish time in the price file's name | Final |

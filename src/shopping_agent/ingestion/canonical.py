@@ -8,7 +8,6 @@ See ``docs/canonical-schema.md`` for the column-by-column description.
 
 import re
 import shutil
-import tempfile
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -281,7 +280,8 @@ def write_canonical(
     folder.parent.mkdir(parents=True, exist_ok=True)
     # Dot-prefixed, so a reader looking for ``v=*`` never meets a half-written folder,
     # and unique, so a second run of the same version cannot write into this one.
-    staging = Path(tempfile.mkdtemp(prefix=f".{folder.name}.", suffix=".tmp", dir=folder.parent))
+    staging = folder.with_name(f".{folder.name}.{uuid.uuid4().hex}.tmp")
+    staging.mkdir()  # not mkdtemp, which would make the published folder owner-only
     try:
         for name, table in tables.items():
             table.write_parquet(staging / f"{name}.parquet")

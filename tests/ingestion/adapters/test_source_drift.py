@@ -47,6 +47,7 @@ class TestUnparseableValues:
             ("file_name", "Price.xml"),
             ("file_name", "Price7290103152017-001-006-20261114.xml"),
             ("file_name", "Price7290103152017-001-006-20261114-0900123.xml"),
+            ("file_name", "Price7290103152017-001-006-20261114-09001.xml"),
             ("file_name", "Price7290103152017-001-006-20260327-023000.xml"),
             # The hour skipped when the clocks go forward does not exist in Israel.
             ("priceupdatetime", "2026-03-27T02:30:00"),

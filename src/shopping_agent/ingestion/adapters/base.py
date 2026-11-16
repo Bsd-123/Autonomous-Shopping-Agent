@@ -183,8 +183,8 @@ def _file_published_at() -> pl.Expr:
     says nothing about how fresh the listing is. A name that does not end this
     way gives null, which the parse check turns into an error.
     """
-    day = pl.col("file_name").str.extract(r"-(\d{8})-\d{4,6}(?:\.|$)", 1)
-    clock = pl.col("file_name").str.extract(r"-\d{8}-(\d{4,6})(?:\.|$)", 1).str.pad_end(6, "0")
+    day = pl.col("file_name").str.extract(r"-(\d{8})-(?:\d{4}|\d{6})(?:\.|$)", 1)
+    clock = pl.col("file_name").str.extract(r"-\d{8}-(\d{4}|\d{6})(?:\.|$)", 1).str.pad_end(6, "0")
     return parse_local_time(day + clock, "%Y%m%d%H%M%S")
 
 

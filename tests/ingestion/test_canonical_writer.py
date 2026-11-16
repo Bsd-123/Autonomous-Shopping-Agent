@@ -1,5 +1,7 @@
 """Tests for writing the canonical dataset: the folder, its version and its timestamp."""
 
+import os
+import stat
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -229,3 +231,15 @@ def test_leftovers_of_a_killed_run_do_not_block_the_next_run(raw_dir, tmp_path):
 
     prices = pl.read_parquet(tmp_path / "v=2026-11-15" / "prices.parquet")
     assert prices["ingestion_timestamp"].unique().to_list() == [later]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Windows has no permission bits to compare")
+def test_the_dataset_folder_has_the_mode_of_a_plain_folder(raw_dir, tmp_path):
+    # tempfile.mkdtemp would make it owner-only, which a container user that is not the
+    # owner could not read.
+    plain = tmp_path / "plain"
+    plain.mkdir()
+
+    folder = write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
+
+    assert stat.S_IMODE(folder.stat().st_mode) == stat.S_IMODE(plain.stat().st_mode)
