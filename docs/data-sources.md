@@ -47,4 +47,4 @@ Every adapter returns two frames with the same columns and types for all chains,
 
 ## Sample files
 
-`tests/fixtures/raw/` holds small samples taken from the dataset on 2026-11-15, used by the adapter tests. They are redistributed under the dataset's licence.
+`tests/fixtures/raw/` holds small samples taken from the dataset on 2026-11-15, used by the adapter tests. Rows are copied as published. The Shufersal price sample joins two slices of the full file (the first 40 rows, and the first 160 rows of Yesh Hesed store 611); the first row of the second slice has its "same as above" cells written out so it does not depend on rows that were left out. They are redistributed under the dataset's licence.
