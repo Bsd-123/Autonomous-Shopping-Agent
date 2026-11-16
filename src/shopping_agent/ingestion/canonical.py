@@ -13,60 +13,69 @@ from pathlib import Path
 import polars as pl
 
 from shopping_agent.ingestion.adapters import ADAPTERS, ChainAdapter
+from shopping_agent.ingestion.adapters.layout import SOURCE_TIME
 
 PRICE_FLAG_OK = "ok"
 PRICE_FLAG_CARRIED_FORWARD = "carried_forward"
 GEOCODE_PENDING = "pending"
 VALIDATION_NOT_RUN = "not_validated"
 
-PRODUCTS_SCHEMA: dict[str, pl.DataType] = {
-    "product_key": pl.String(),
-    "barcode": pl.String(),
-    "name": pl.String(),
-    "name_normalized": pl.String(),
-    "brand": pl.String(),
-    "category": pl.String(),
-    "size_value": pl.Float64(),
-    "size_unit": pl.String(),
-    "base_quantity": pl.Float64(),
-    "base_unit": pl.String(),
-    "is_weighed": pl.Boolean(),
-    "attributes": pl.String(),
-}
+PRODUCTS_SCHEMA = pl.Schema(
+    {
+        "product_key": pl.String(),
+        "barcode": pl.String(),
+        "name": pl.String(),
+        "name_normalized": pl.String(),
+        "brand": pl.String(),
+        "category": pl.String(),
+        "size_value": pl.Float64(),
+        "size_unit": pl.String(),
+        "base_quantity": pl.Float64(),
+        "base_unit": pl.String(),
+        "is_weighed": pl.Boolean(),
+        "attributes": pl.String(),
+    }
+)
 
-PRICES_SCHEMA: dict[str, pl.DataType] = {
-    "product_key": pl.String(),
-    "store_id": pl.String(),
-    "price_agorot": pl.Int64(),
-    "price_flag": pl.String(),
-    "last_seen_date": pl.Date(),
-    "source_timestamp": pl.Datetime("ms"),
-    "ingestion_timestamp": pl.Datetime("ms", "UTC"),
-    "dataset_version": pl.String(),
-}
+PRICES_SCHEMA = pl.Schema(
+    {
+        "product_key": pl.String(),
+        "store_id": pl.String(),
+        "price_agorot": pl.Int64(),
+        "price_flag": pl.String(),
+        "last_seen_date": pl.Date(),
+        "source_timestamp": SOURCE_TIME,
+        "ingestion_timestamp": pl.Datetime("ms", "UTC"),
+        "dataset_version": pl.String(),
+    }
+)
 
-STORES_SCHEMA: dict[str, pl.DataType] = {
-    "store_id": pl.String(),
-    "chain": pl.String(),
-    "name": pl.String(),
-    "address": pl.String(),
-    "city": pl.String(),
-    "lat": pl.Float64(),
-    "lon": pl.Float64(),
-    "geocode_status": pl.String(),
-}
+STORES_SCHEMA = pl.Schema(
+    {
+        "store_id": pl.String(),
+        "chain": pl.String(),
+        "name": pl.String(),
+        "address": pl.String(),
+        "city": pl.String(),
+        "lat": pl.Float64(),
+        "lon": pl.Float64(),
+        "geocode_status": pl.String(),
+    }
+)
 
-INGESTION_RUNS_SCHEMA: dict[str, pl.DataType] = {
-    "dataset_version": pl.String(),
-    "chain": pl.String(),
-    "validation_status": pl.String(),
-    "rows_in": pl.Int64(),
-    "rows_rejected": pl.Int64(),
-    "ingestion_timestamp": pl.Datetime("ms", "UTC"),
-    "newest_source_timestamp": pl.Datetime("ms"),
-}
+INGESTION_RUNS_SCHEMA = pl.Schema(
+    {
+        "dataset_version": pl.String(),
+        "chain": pl.String(),
+        "validation_status": pl.String(),
+        "rows_in": pl.Int64(),
+        "rows_rejected": pl.Int64(),
+        "ingestion_timestamp": pl.Datetime("ms", "UTC"),
+        "newest_source_timestamp": SOURCE_TIME,
+    }
+)
 
-SCHEMAS: dict[str, dict[str, pl.DataType]] = {
+SCHEMAS: dict[str, pl.Schema] = {
     "products": PRODUCTS_SCHEMA,
     "prices": PRICES_SCHEMA,
     "stores": STORES_SCHEMA,
@@ -80,7 +89,7 @@ def _product_key() -> pl.Expr:
     return pl.concat_str("chain", pl.lit(":"), "item_code")
 
 
-def _null(name: str, schema: dict[str, pl.DataType]) -> pl.Expr:
+def _null(name: str, schema: pl.Schema) -> pl.Expr:
     return pl.lit(None, dtype=schema[name]).alias(name)
 
 

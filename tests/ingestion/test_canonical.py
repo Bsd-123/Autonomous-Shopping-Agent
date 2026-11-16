@@ -5,6 +5,8 @@ from datetime import UTC, date, datetime
 import polars as pl
 import pytest
 
+from shopping_agent.ingestion.adapters import OsherAdAdapter
+from shopping_agent.ingestion.adapters.layout import SOURCE_TIME
 from shopping_agent.ingestion.canonical import (
     INGESTION_RUNS_SCHEMA,
     PRICES_SCHEMA,
@@ -12,8 +14,10 @@ from shopping_agent.ingestion.canonical import (
     SCHEMAS,
     STORES_SCHEMA,
     build_canonical,
+    build_prices,
     write_canonical,
 )
+from support import OSHER_PRICES, stage_fixture
 
 VERSION = "2026-11-15"
 RUN_AT = datetime(2026, 11, 15, 3, 0, tzinfo=UTC)
@@ -154,3 +158,21 @@ def test_dataset_version_defaults_to_the_run_date(raw_dir, tmp_path):
     folder = write_canonical(raw_dir, tmp_path / "canonical", ingestion_timestamp=RUN_AT)
 
     assert folder.name == "v=2026-11-15"
+
+
+def test_published_times_keep_israel_time(tables):
+    assert PRICES_SCHEMA["source_timestamp"] == SOURCE_TIME
+    assert INGESTION_RUNS_SCHEMA["newest_source_timestamp"] == SOURCE_TIME
+    assert tables["prices"]["source_timestamp"][0].utcoffset().total_seconds() == 2 * 3600
+
+
+def test_last_seen_date_is_the_israeli_date_of_the_publish_time(raw_dir, tmp_path):
+    # 00:30 in Israel is still the day before in UTC.
+    stage_fixture(
+        tmp_path, OSHER_PRICES, file_name="Price7290103152017-001-006-20261114-003000.xml"
+    )
+
+    prices = build_prices(OsherAdAdapter().read_prices(tmp_path), VERSION, RUN_AT)
+
+    assert prices["last_seen_date"].unique().to_list() == [date(2026, 11, 14)]
+    assert prices["source_timestamp"][0].isoformat() == "2026-11-14T00:30:00+02:00"

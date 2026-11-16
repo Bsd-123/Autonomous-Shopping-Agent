@@ -10,6 +10,8 @@ Requires Python 3.12 and [uv](https://docs.astral.sh/uv/).
 uv sync
 uv run pytest
 uv run ruff check .
+uv run ruff format --check .
+uv run mypy
 ```
 
 Documentation is in `docs/`: the system architecture, the work breakdown, the data sources and chain adapters, and the canonical schema.
