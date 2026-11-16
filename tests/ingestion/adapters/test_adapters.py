@@ -147,15 +147,26 @@ class TestYeshHesed:
         bnei_brak = stores.filter(city="6100")["store_id"].to_list()
         assert sorted(bnei_brak) == ["yesh_hesed:219", "yesh_hesed:295", "yesh_hesed:611"]
 
-    def test_prices_keep_only_rows_of_yesh_hesed_stores(self, raw_dir):
-        # The Shufersal price file here is constructed; see conftest.py.
-        prices = YeshHesedAdapter().read_prices(raw_dir)
+    def test_prices_keep_only_rows_of_yesh_hesed_stores(self):
+        # The sample holds 40 rows of store 11, which belongs to another
+        # Shufersal sub-chain, followed by 160 rows of Yesh Hesed store 611.
+        prices = YeshHesedAdapter().read_prices(RAW)
 
         assert_price_layout(prices, "yesh_hesed")
-        assert prices["store_id"].to_list() == ["yesh_hesed:611", "yesh_hesed:611"]
-        assert prices["item_code"].to_list() == ["3838824438696", "7290000000015"]
-        assert prices["price"].to_list() == [Decimal("49.90"), Decimal("12.50")]
-        assert prices["manufacturer"].to_list() == ["סלובניה", None]
-        assert prices["qty_in_package"].to_list() == [1.0, 1.0]
-        assert prices["source_timestamp"].unique().to_list() == [datetime(2026, 11, 14, 1, 0, 0)]
-        assert prices["price_updated_at"].unique().to_list() == [datetime(2026, 11, 14, 0, 10)]
+        assert prices.height == 160
+        assert prices["store_id"].unique().to_list() == ["yesh_hesed:611"]
+        assert prices["source_file"].unique().to_list() == [
+            "PriceFull7290027600007-006-611-20261114-030000.xml"
+        ]
+        beans = row(prices, item_code="11182700954")
+        assert beans["name"] == "שעועית שחורה 439 גרם"
+        assert beans["price"] == Decimal("9.90")
+        assert beans["quantity"] == 439.0
+        assert beans["unit"] == "גרם"
+        assert beans["qty_in_package"] == 1.0
+        assert beans["is_weighed"] is False
+        # Published time comes from the file name. Shufersal's own timestamps
+        # carry no milliseconds.
+        assert prices["source_timestamp"].unique().to_list() == [datetime(2026, 11, 14, 3, 0, 0)]
+        assert beans["price_updated_at"] == datetime(2016, 11, 13, 7, 45)
+        assert prices["price_updated_at"].null_count() == 0

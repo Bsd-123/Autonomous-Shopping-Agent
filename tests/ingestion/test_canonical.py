@@ -86,7 +86,7 @@ def test_freshness_columns_are_populated(tables):
 def test_prices_are_integer_agorot_with_a_flag(tables):
     prices = tables["prices"]
 
-    assert prices.height == 218 + 300 + 2
+    assert prices.height == 218 + 300 + 160
     assert prices["price_flag"].unique().to_list() == ["ok"]
     assert (prices["price_agorot"] > 0).all()
     muffin = prices.filter(product_key="osher_ad:7290006775405").row(0, named=True)
@@ -127,7 +127,7 @@ def test_ingestion_runs_has_one_row_per_chain(tables):
     runs = tables["ingestion_runs"]
 
     assert runs["chain"].to_list() == CHAINS
-    assert runs["rows_in"].to_list() == [300, 218, 2]
+    assert runs["rows_in"].to_list() == [300, 218, 160]
     assert runs["rows_rejected"].to_list() == [0, 0, 0]
     assert runs["validation_status"].unique().to_list() == ["not_validated"]
     assert runs["dataset_version"].unique().to_list() == [VERSION]
