@@ -99,6 +99,34 @@ def require_parsed(raw: pl.DataFrame, parsed: pl.DataFrame, sources: Mapping[str
             )
 
 
+def require_rows(frame: pl.DataFrame, what: str) -> pl.DataFrame:
+    """Return ``frame``, failing when it is empty.
+
+    Rows that vanish entirely, for example when a sub-chain is renamed, are
+    drift in the source and must not pass as an empty chain.
+    """
+    if frame.is_empty():
+        raise RawFormatError(f"no {what} found")
+    return frame
+
+
+def require_unique(frame: pl.DataFrame, column: str, source: str) -> pl.DataFrame:
+    """Return ``frame``, failing when ``column`` holds a value more than once."""
+    values = frame[column]
+    duplicated = values.filter(values.is_duplicated()).unique().sort()
+    if not duplicated.is_empty():
+        raise RawFormatError(
+            f"{source}: duplicate {column} values: {', '.join(duplicated.head(5))}"
+        )
+    return frame
+
+
+def parse_float(column: str) -> pl.Expr:
+    """Parse a numeric column, rejecting NaN, infinities and overflow, which the cast accepts."""
+    parsed = pl.col(column).cast(pl.Float64, strict=False)
+    return pl.when(parsed.is_finite()).then(parsed)
+
+
 def build_frame(
     raw: pl.DataFrame, columns: Mapping[str, str | pl.Expr | Parsed], schema: pl.Schema
 ) -> pl.DataFrame:
@@ -173,8 +201,11 @@ class ChainAdapter:
         require_parsed(snapshots, snapshots, {"updated_at": "updated"})
         # The file can hold several daily snapshots; only the newest is current.
         newest = snapshots.filter(pl.col("updated_at") == pl.col("updated_at").max())
-        return build_frame(
-            self.select_raw_stores(newest),
+        selected = require_rows(
+            self.select_raw_stores(newest), f"{self.chain} stores in {path.name}"
+        )
+        stores = build_frame(
+            selected,
             {
                 "chain": pl.lit(self.chain),
                 "store_id": Parsed("storeid", self._store_id()),
@@ -187,8 +218,15 @@ class ChainAdapter:
             },
             STORE_SCHEMA,
         )
+        # The store number is the key of the stores table, and "011" and "11" are one store.
+        return require_unique(stores, "store_id", path.name)
 
-    def read_prices(self, raw_dir: Path) -> pl.DataFrame:
+    def read_prices(self, raw_dir: Path, stores: pl.DataFrame | None = None) -> pl.DataFrame:
+        """Read the chain's prices.
+
+        ``stores`` is the frame from ``read_stores``. Chains whose price files hold
+        other chains' rows use it to select their own; the others ignore it.
+        """
         return self._parse_prices(self._read_raw_prices(raw_dir))
 
     def select_raw_stores(self, raw: pl.DataFrame) -> pl.DataFrame:
@@ -203,9 +241,10 @@ class ChainAdapter:
         paths = [path for path in candidates if path.is_file()]
         if not paths:
             raise RawFormatError(f"no price files for {self.chain} in {folder}")
-        return pl.concat(
+        raw = pl.concat(
             [read_expanded(path, RAW_PRICE_COLUMNS, self.null_markers) for path in paths]
         )
+        return require_rows(raw, f"{self.chain} price rows in {folder}")
 
     def _parse_prices(self, raw: pl.DataFrame) -> pl.DataFrame:
         weighed = pl.col("bisweighted")
@@ -222,12 +261,10 @@ class ChainAdapter:
                     "bisweighted",
                     pl.when(weighed == "1").then(True).when(weighed == "0").then(False),
                 ),
-                "quantity": Parsed("quantity", pl.col("quantity").cast(pl.Float64, strict=False)),
+                "quantity": Parsed("quantity", parse_float("quantity")),
                 "unit": "unitqty",
                 "unit_of_measure": "unitofmeasure",
-                "qty_in_package": Parsed(
-                    "qtyinpackage", pl.col("qtyinpackage").cast(pl.Float64, strict=False)
-                ),
+                "qty_in_package": Parsed("qtyinpackage", parse_float("qtyinpackage")),
                 "price": Parsed(
                     "itemprice",
                     pl.when(price.str.contains(PRICE_PATTERN)).then(

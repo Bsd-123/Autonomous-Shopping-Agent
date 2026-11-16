@@ -9,7 +9,7 @@ from pathlib import Path
 
 import polars as pl
 
-from shopping_agent.ingestion.adapters.base import ChainAdapter, require_parsed
+from shopping_agent.ingestion.adapters.base import ChainAdapter, require_parsed, require_rows
 
 SUB_CHAIN_NAME = "יש חסד"
 
@@ -36,6 +36,5 @@ class YeshHesedAdapter(ChainAdapter):
         raw = self._read_raw_prices(raw_dir)
         store_ids = raw.select(store_id=self._store_id())
         require_parsed(raw, store_ids, {"store_id": "storeid"})
-        return self._parse_prices(
-            raw.filter(store_ids["store_id"].is_in(stores["store_id"].implode()))
-        )
+        own = raw.filter(store_ids["store_id"].is_in(stores["store_id"].implode()))
+        return self._parse_prices(require_rows(own, f"{self.chain} price rows for its stores"))

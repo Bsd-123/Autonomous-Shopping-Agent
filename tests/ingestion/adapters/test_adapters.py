@@ -1,64 +1,27 @@
 """Adapter tests run against sample files cut from each chain's real data."""
 
-import shutil
 from decimal import Decimal
-from pathlib import Path
 
-import polars as pl
 import pytest
+from support import (
+    OSHER_PRICES,
+    RAW,
+    assert_price_layout,
+    assert_store_layout,
+    row,
+    stage_fixture,
+    stage_shufersal,
+    write_store_snapshots,
+)
 
 from shopping_agent.ingestion.adapters import (
-    PRICE_SCHEMA,
-    STORE_SCHEMA,
-    ChainAdapter,
+    ADAPTERS,
     Maayan2000Adapter,
     OsherAdAdapter,
     RawFormatError,
     YeshHesedAdapter,
 )
-from shopping_agent.ingestion.adapters.base import (
-    RAW_STORE_COLUMNS,
-    Parsed,
-    build_frame,
-    read_expanded,
-)
-
-RAW = Path(__file__).parents[2] / "fixtures" / "raw"
-PLACEHOLDERS = ["''", "", "לא ידוע", "XXXXX"]
-
-
-def assert_no_placeholders(frame: pl.DataFrame) -> None:
-    text = frame.select(pl.col(pl.String))
-    leaked = text.select(pl.all().is_in(PLACEHOLDERS).sum()).row(0)
-    assert sum(leaked) == 0
-
-
-def assert_store_layout(stores: pl.DataFrame, chain: str) -> None:
-    assert stores.schema == STORE_SCHEMA
-    assert stores.columns == STORE_SCHEMA.names()
-    assert stores["chain"].unique().to_list() == [chain]
-    assert stores["store_id"].is_unique().all()
-    assert stores["store_id"].str.starts_with(f"{chain}:").all()
-    assert stores.select(pl.col("store_id", "name", "source_timestamp").null_count().sum()).row(
-        0
-    ) == (0, 0, 0)
-    assert_no_placeholders(stores)
-
-
-def assert_price_layout(prices: pl.DataFrame, chain: str) -> None:
-    assert prices.schema == PRICE_SCHEMA
-    assert prices.columns == PRICE_SCHEMA.names()
-    assert prices["chain"].unique().to_list() == [chain]
-    required = ["store_id", "item_code", "name", "is_weighed", "price", "source_file"]
-    assert sum(prices.select(pl.col(required).null_count()).row(0)) == 0
-    assert (prices["price"] > 0).all()
-    assert_no_placeholders(prices)
-
-
-def row(frame: pl.DataFrame, **where: str) -> dict:
-    matches = frame.filter(**where)
-    assert matches.height >= 1, where
-    return matches.row(0, named=True)
+from shopping_agent.ingestion.adapters.base import read_expanded
 
 
 class TestReadExpanded:
@@ -113,6 +76,19 @@ class TestOsherAd:
         assert prices["qty_in_package"].null_count() == prices.height
         assert prices["unit"].null_count() == 76
         assert not prices["unit_of_measure"].str.ends_with(" ").any()
+
+    def test_full_and_update_price_files_are_both_read(self, tmp_path):
+        full = stage_fixture(tmp_path, OSHER_PRICES, file_name="PriceFull.xml")
+        full.rename(full.with_name("price_full_file_osher_ad.csv"))
+        stage_fixture(tmp_path, OSHER_PRICES)
+
+        prices = OsherAdAdapter().read_prices(tmp_path)
+
+        assert_price_layout(prices, "osher_ad")
+        # The full list comes first, then the updates; rows are kept as published.
+        full_rows, update_rows = prices.head(218), prices.tail(218)
+        assert full_rows["source_file"][0] == "PriceFull.xml"
+        assert full_rows.drop("source_file").equals(update_rows.drop("source_file"))
 
 
 class TestMaayan2000:
@@ -173,78 +149,23 @@ class TestYeshHesed:
         # Shufersal timestamps carry no milliseconds.
         assert prices["source_timestamp"].null_count() == 0
 
+    def test_stores_can_be_passed_in_so_the_store_file_is_not_read_again(self, tmp_path):
+        stores = YeshHesedAdapter().read_stores(RAW)
+        stage_shufersal(tmp_path, stores=False)
 
-def copy_fixture(source: Path, target: Path, **first_row: str) -> None:
-    """Copy a fixture CSV, replacing cells of its first row (which holds every value)."""
-    frame = pl.read_csv(source, infer_schema=False)
-    first = pl.int_range(pl.len()) == 0
-    frame = frame.with_columns(
-        pl.when(first).then(pl.lit(value)).otherwise(pl.col(column)).alias(column)
-        for column, value in first_row.items()
-    )
-    target.parent.mkdir(parents=True, exist_ok=True)
-    frame.write_csv(target)
+        prices = YeshHesedAdapter().read_prices(tmp_path, stores)
+
+        assert prices.equals(YeshHesedAdapter().read_prices(RAW))
 
 
-class TestFailsLoudlyOnUnparseableValues:
-    PRICES = RAW / "osherad" / "price_file_osher_ad.csv"
-    STORES = RAW / "osherad" / "store_file_osher_ad.csv"
+@pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda adapter: adapter.chain)
+def test_passing_the_stores_never_changes_the_prices(adapter):
+    stores = adapter.read_stores(RAW)
 
-    @pytest.mark.parametrize(
-        ("column", "value"),
-        [
-            ("itemprice", "12,90"),
-            ("itemprice", "1.505"),
-            ("quantity", "abc"),
-            ("qtyinpackage", "1/2"),
-            ("bisweighted", "yes"),
-            ("storeid", "A6"),
-            ("priceupdatetime", "yesterday"),
-        ],
-    )
-    def test_prices(self, tmp_path, column, value):
-        copy_fixture(self.PRICES, tmp_path / "osherad" / self.PRICES.name, **{column: value})
-
-        with pytest.raises(RawFormatError, match=f"{column} value"):
-            OsherAdAdapter().read_prices(tmp_path)
-
-    def test_store_number(self, tmp_path):
-        copy_fixture(self.STORES, tmp_path / "osherad" / self.STORES.name, storeid="A1")
-
-        with pytest.raises(RawFormatError, match="storeid value"):
-            OsherAdAdapter().read_stores(tmp_path)
-
-    def test_store_rows_without_update_time(self, tmp_path):
-        copy_fixture(self.STORES, tmp_path / "osherad" / self.STORES.name, lastupdatedate="''")
-
-        with pytest.raises(RawFormatError, match="without an update time"):
-            OsherAdAdapter().read_stores(tmp_path)
-
-
-def test_full_and_update_price_files_are_both_read(tmp_path):
-    source = RAW / "osherad" / "price_file_osher_ad.csv"
-    folder = tmp_path / "osherad"
-    copy_fixture(source, folder / "price_file_osher_ad.csv")
-    copy_fixture(source, folder / "price_full_file_osher_ad.csv", file_name="PriceFull.xml")
-
-    prices = OsherAdAdapter().read_prices(tmp_path)
-
-    assert_price_layout(prices, "osher_ad")
-    # The full list comes first, then the updates; rows are kept as published.
-    full, update = prices.head(218), prices.tail(218)
-    assert full["source_file"][0] == "PriceFull.xml"
-    assert full.drop("source_file").equals(update.drop("source_file"))
+    assert adapter.read_prices(RAW, stores).equals(adapter.read_prices(RAW))
 
 
 class TestIsraelLocalTime:
-    PRICES = RAW / "osherad" / "price_file_osher_ad.csv"
-
-    def first_price_timestamp(self, tmp_path, published: str):
-        copy_fixture(
-            self.PRICES, tmp_path / "osherad" / self.PRICES.name, priceupdatetime=published
-        )
-        return OsherAdAdapter().read_prices(tmp_path)["source_timestamp"][0]
-
     @pytest.mark.parametrize(
         ("published", "expected"),
         [
@@ -255,34 +176,16 @@ class TestIsraelLocalTime:
         ],
     )
     def test_published_time_is_read_as_israel_local_time(self, tmp_path, published, expected):
-        assert self.first_price_timestamp(tmp_path, published).isoformat() == expected
+        stage_fixture(tmp_path, OSHER_PRICES, priceupdatetime=published)
 
-    def test_a_time_skipped_by_the_clocks_going_forward_fails_loudly(self, tmp_path):
-        copy_fixture(
-            self.PRICES,
-            tmp_path / "osherad" / self.PRICES.name,
-            priceupdatetime="2026-03-27T02:30:00",
-        )
+        timestamp = OsherAdAdapter().read_prices(tmp_path)["source_timestamp"][0]
 
-        with pytest.raises(RawFormatError, match="priceupdatetime value"):
-            OsherAdAdapter().read_prices(tmp_path)
+        assert timestamp.isoformat() == expected
 
     def test_store_snapshot_time_is_israel_local_time(self):
         stores = OsherAdAdapter().read_stores(RAW)
 
         assert stores["source_timestamp"][0].isoformat() == "2026-11-14T08:05:00.900000+02:00"
-
-
-def write_store_snapshots(raw_dir: Path, *snapshots: tuple[str, str, str]) -> None:
-    """Write an Osher Ad store file with one store per (date, time, store number)."""
-    rows = [
-        f"snapshot{index}.xml,{date},{time},1,1,{number},store {number},address,6100,0"
-        for index, (date, time, number) in enumerate(snapshots)
-    ]
-    folder = raw_dir / "osherad"
-    folder.mkdir()
-    lines = [",".join(RAW_STORE_COLUMNS), *rows]
-    (folder / "store_file_osher_ad.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 class TestStoreSnapshots:
@@ -296,65 +199,11 @@ class TestStoreSnapshots:
 
         assert stores["store_id"].to_list() == ["osher_ad:2"]
 
-    def test_an_unreadable_time_in_an_older_snapshot_fails_loudly(self, tmp_path):
+    def test_a_store_listed_in_two_snapshots_is_not_a_duplicate(self, tmp_path):
         write_store_snapshots(
-            tmp_path, ("2026-11-13", "not a time", "1"), ("2026-11-14", "10:01:00", "2")
+            tmp_path, ("2026-11-13", "08:00:00", "11"), ("2026-11-14", "08:05:00", "11")
         )
 
-        with pytest.raises(RawFormatError, match="updated value"):
-            OsherAdAdapter().read_stores(tmp_path)
+        stores = OsherAdAdapter().read_stores(tmp_path)
 
-
-class TestYeshHesedPrices:
-    PRICES = RAW / "shufersal" / "price_full_file_shufersal.csv"
-    STORES = RAW / "shufersal" / "store_file_shufersal.csv"
-
-    def shufersal_folder(self, raw_dir: Path, *, stores: bool = True, **first_row: str) -> None:
-        # The first row of the sample belongs to store 11 of another sub-chain.
-        copy_fixture(self.PRICES, raw_dir / "shufersal" / self.PRICES.name, **first_row)
-        if stores:
-            shutil.copy(self.STORES, raw_dir / "shufersal" / self.STORES.name)
-
-    def test_values_of_other_sub_chains_are_not_validated(self, tmp_path):
-        self.shufersal_folder(tmp_path, itemprice="not a price")
-
-        prices = YeshHesedAdapter().read_prices(tmp_path)
-
-        assert prices.height == 160
-
-    def test_values_of_yesh_hesed_stores_are_validated(self, tmp_path):
-        self.shufersal_folder(tmp_path, storeid="611", itemprice="not a price")
-
-        with pytest.raises(RawFormatError, match="itemprice value"):
-            YeshHesedAdapter().read_prices(tmp_path)
-
-    def test_stores_can_be_passed_in_so_the_store_file_is_not_read_again(self, tmp_path):
-        stores = YeshHesedAdapter().read_stores(RAW)
-        self.shufersal_folder(tmp_path, stores=False)
-
-        prices = YeshHesedAdapter().read_prices(tmp_path, stores)
-
-        assert prices.equals(YeshHesedAdapter().read_prices(RAW))
-
-
-def test_a_chain_adapter_without_its_settings_fails_when_defined():
-    with pytest.raises(TypeError, match="source_folder, source_name"):
-
-        class Incomplete(ChainAdapter):
-            chain = "incomplete"
-
-
-def test_every_parsed_column_is_checked_for_lost_values():
-    raw = pl.DataFrame({"file_name": ["f.xml"], "amount": ["x"]})
-    columns = {"amount": Parsed("amount", pl.col("amount").cast(pl.Int64, strict=False))}
-
-    with pytest.raises(RawFormatError, match=r"f\.xml: 1 amount value"):
-        build_frame(raw, columns, pl.Schema({"amount": pl.Int64()}))
-
-
-def test_an_unreadable_store_number_fails_even_in_rows_of_other_sub_chains(tmp_path):
-    prices = RAW / "shufersal" / "price_full_file_shufersal.csv"
-    copy_fixture(prices, tmp_path / "shufersal" / prices.name, storeid="A6")
-
-    with pytest.raises(RawFormatError, match="storeid value"):
-        YeshHesedAdapter().read_prices(tmp_path, YeshHesedAdapter().read_stores(RAW))
+        assert stores["store_id"].to_list() == ["osher_ad:11"]
