@@ -17,11 +17,20 @@ import polars as pl
 
 from shopping_agent.ingestion.adapters import ADAPTERS, ChainAdapter
 from shopping_agent.ingestion.adapters.layout import SOURCE_TIME
+from shopping_agent.ingestion.validation import (
+    VALIDATION_FAILED,
+    VALIDATION_NOT_RUN,
+    VALIDATION_PASSED,
+    SchemaDriftError,
+    validate_tables,
+)
 
 PRICE_FLAG_OK = "ok"
 PRICE_FLAG_CARRIED_FORWARD = "carried_forward"
 GEOCODE_PENDING = "pending"
-VALIDATION_NOT_RUN = "not_validated"
+# Where the run record of a dataset that failed validation is kept, next to the
+# ``v=*`` folders and never among them.
+REJECTED_FOLDER = "rejected"
 
 # The version becomes a folder name and an image tag, so it has to be a plain token.
 DATASET_VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -225,17 +234,37 @@ def build_ingestion_runs(
     )
 
 
+def _with_status(tables: Mapping[str, pl.DataFrame], status: str) -> dict[str, pl.DataFrame]:
+    """The tables with ``validation_status`` of every run row set to ``status``."""
+    runs = tables["ingestion_runs"].with_columns(validation_status=pl.lit(status))
+    return {**tables, "ingestion_runs": runs}
+
+
 def build_canonical(
     raw_dir: Path,
     dataset_version: str,
     ingestion_timestamp: datetime,
     adapters: Sequence[ChainAdapter] = ADAPTERS,
 ) -> dict[str, pl.DataFrame]:
-    """Read every chain through its adapter and build the four tables.
+    """Read every chain through its adapter, build the four tables and validate them.
 
     Raises ``CanonicalError`` for an invalid version, a timestamp without a time
-    zone, or tables that break the key and reference rules.
+    zone, or tables that break the key and reference rules, and
+    ``SchemaDriftError`` when a table does not match its Pandera schema. The
+    tables that come back carry ``validation_status = "passed"``.
     """
+    tables = _build_tables(raw_dir, dataset_version, ingestion_timestamp, adapters)
+    validate_tables(tables)
+    return _with_status(tables, VALIDATION_PASSED)
+
+
+def _build_tables(
+    raw_dir: Path,
+    dataset_version: str,
+    ingestion_timestamp: datetime,
+    adapters: Sequence[ChainAdapter] = ADAPTERS,
+) -> dict[str, pl.DataFrame]:
+    """Build the four tables and check their keys, before schema validation."""
     _require_valid_version(dataset_version)
     _require_aware(ingestion_timestamp)
     chain_stores = [adapter.read_stores(raw_dir) for adapter in adapters]
@@ -265,6 +294,10 @@ def write_canonical(
 ) -> Path:
     """Write the four tables to ``<out_dir>/v=<dataset_version>/`` and return that folder.
 
+    The tables are validated first. On a schema violation nothing is written to
+    ``v=<dataset_version>``; only the run record, marked ``failed``, is kept under
+    ``rejected/``, and ``SchemaDriftError`` is raised.
+
     The files are written to a folder of their own next to it and moved into place
     once all four exist. A failed run leaves no partial dataset and a failed re-run
     keeps the previous one. Overlapping runs of one version cannot mix their files;
@@ -275,7 +308,13 @@ def write_canonical(
     ingestion_timestamp = _require_aware(ingestion_timestamp or datetime.now(UTC))
     if dataset_version is None:
         dataset_version = ingestion_timestamp.astimezone(UTC).date().isoformat()
-    tables = build_canonical(raw_dir, dataset_version, ingestion_timestamp, adapters)
+    tables = _build_tables(raw_dir, dataset_version, ingestion_timestamp, adapters)
+    try:
+        validate_tables(tables)
+    except SchemaDriftError:
+        _record_rejected(Path(out_dir), dataset_version, tables)
+        raise
+    tables = _with_status(tables, VALIDATION_PASSED)
     folder = Path(out_dir) / f"v={dataset_version}"
     folder.parent.mkdir(parents=True, exist_ok=True)
     # Dot-prefixed, so a reader looking for ``v=*`` never meets a half-written folder,
@@ -289,6 +328,25 @@ def write_canonical(
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return folder
+
+
+def _record_rejected(
+    out_dir: Path, dataset_version: str, tables: Mapping[str, pl.DataFrame]
+) -> None:
+    """Keep the run record of a dataset that failed validation, and nothing else of it.
+
+    The record goes to ``<out_dir>/rejected/v=<dataset_version>/ingestion_runs.parquet``
+    with ``validation_status = "failed"``. No ``v=*`` folder is written, so nothing
+    can be built or deployed from the run.
+    """
+    runs = tables.get("ingestion_runs")
+    if runs is None or "validation_status" not in runs.columns:
+        return
+    folder = out_dir / REJECTED_FOLDER / f"v={dataset_version}"
+    folder.mkdir(parents=True, exist_ok=True)
+    runs.with_columns(validation_status=pl.lit(VALIDATION_FAILED)).write_parquet(
+        folder / "ingestion_runs.parquet"
+    )
 
 
 def _publish(staging: Path, folder: Path) -> None:

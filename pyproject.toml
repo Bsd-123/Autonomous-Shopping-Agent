@@ -5,6 +5,7 @@ description = "Turns a natural-language shopping list into the cheapest basket a
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pandera[polars]>=0.20",
     "polars>=2.1",
     "pydantic>=2.8",
     "tzdata>=2024.1",

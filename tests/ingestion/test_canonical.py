@@ -136,7 +136,7 @@ def test_ingestion_runs_has_one_row_per_chain(tables):
     assert runs["chain"].to_list() == CHAINS
     assert runs["rows_in"].to_list() == [300, 218, 160]
     assert runs["rows_rejected"].to_list() == [0, 0, 0]
-    assert runs["validation_status"].unique().to_list() == ["not_validated"]
+    assert runs["validation_status"].unique().to_list() == ["passed"]
     assert runs["dataset_version"].unique().to_list() == [VERSION]
     assert runs["newest_source_timestamp"].null_count() == 0
 

@@ -29,6 +29,7 @@ A run either writes a complete dataset or writes nothing. A problem in the data 
 - **Keys exist and are unique:** `products.product_key` and `stores.store_id` have no nulls and no repeats. A listing without an item code fails the run.
 - **Every price points at a row:** `prices.product_key` is in `products` and `prices.store_id` is in `stores`. A price row for a store that is missing from the store file fails the run for Osher Ad and Maayan 2000. Yesh Hesed shares Shufersal's files, so it leaves out the rows of stores it does not list, because they belong to other sub-chains.
 - **`ingestion_timestamp` must carry a time zone.**
+- **Every table matches its Pandera schema** (`shopping_agent.ingestion.validation`): exactly the documented columns, in order, with their types, and the value rules (a known `price_flag`, a well-formed `store_id`, coordinates on the map, and so on). A violation fails the run with the list of broken rules. No `v=<dataset_version>` folder is written; only the run record is kept, in `rejected/v=<dataset_version>/ingestion_runs.parquet`, with `validation_status = failed`.
 
 **Decision to revisit with the cleaning step (#7):** stopping the run for an unknown store is deliberate, because a failed run deploys nothing. If a closed store's price file ever outlives its entry in the store file, a single shop would block the daily run. Then those rows should be counted in `ingestion_runs.rows_rejected` (always 0 today) instead of failing the run. The real data of 2026-11-14/15 has no such rows.
 
@@ -98,7 +99,7 @@ One row per chain per run.
 |---|---|---|---|
 | `dataset_version` | string | the run's version | Final |
 | `chain` | string | | Final |
-| `validation_status` | string | `not_validated` | Interim: schema validation |
+| `validation_status` | string | `passed` in a written dataset; `failed` in the record of a rejected run | Final |
 | `rows_in` | integer | price rows read from the chain's adapter | Final |
 | `rows_rejected` | integer | `0` | Interim: cleaning and validation |
 | `ingestion_timestamp` | timestamp (UTC) | start of the ingestion run | Final |

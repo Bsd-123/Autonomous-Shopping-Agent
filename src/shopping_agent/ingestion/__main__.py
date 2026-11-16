@@ -7,6 +7,7 @@ from pathlib import Path
 
 from shopping_agent.ingestion.adapters import RawFormatError
 from shopping_agent.ingestion.canonical import CanonicalError, write_canonical
+from shopping_agent.ingestion.validation import SchemaDriftError
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -19,7 +20,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         folder = write_canonical(args.raw, args.out, args.dataset_version)
-    except (RawFormatError, CanonicalError) as error:
+    except (RawFormatError, CanonicalError, SchemaDriftError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     print(f"wrote canonical dataset to {folder}")
