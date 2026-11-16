@@ -4,21 +4,33 @@ Parse produces a list of these from the user's text, and the client sends
 them back unchanged, with any clarify choices, when it resubmits.
 """
 
-from typing import Literal, Self
+from collections.abc import Iterable, Iterator, Mapping
+from typing import Annotated, Literal, Self
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
+    PlainSerializer,
     StrictBool,
-    StrictFloat,
     StrictInt,
-    StrictStr,
+    StringConstraints,
     model_validator,
 )
 
+# Generous limits: the client can send parsed items, so every size is bounded.
+MAX_TEXT_LENGTH = 200
+MAX_ATTRIBUTES = 20
+MAX_COUNT = 1_000
+MAX_QUANTITY = 10_000_000  # 10,000 L in ml, or 10,000 kg in g
+
 Unit = Literal["ml", "g", "unit"]
-AttributeValue = StrictBool | StrictInt | StrictFloat | StrictStr
+Text = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_TEXT_LENGTH)
+]
+FiniteFloat = Annotated[float, Field(strict=True, allow_inf_nan=False)]
+AttributeValue = StrictBool | StrictInt | FiniteFloat | Text
 
 
 class Quantity(BaseModel):
@@ -26,7 +38,7 @@ class Quantity(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    value: float = Field(gt=0, allow_inf_nan=False)
+    value: float = Field(gt=0, le=MAX_QUANTITY, allow_inf_nan=False, strict=True)
     unit: Unit
 
 
@@ -40,7 +52,36 @@ class Attribute(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     value: AttributeValue
-    strict: bool = True
+    strict: bool = Field(default=True, strict=True)
+
+
+class ReadOnlyAttributes(Mapping[str, Attribute]):
+    """The attributes of an item. Unlike a dict inside a frozen model, it cannot be changed.
+
+    It can be hashed, copied and pickled, so an item behaves like any other value.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(
+        self, data: Iterable[tuple[str, Attribute]] | Mapping[str, Attribute] = ()
+    ) -> None:
+        self._data = dict(data)
+
+    def __getitem__(self, key: str) -> Attribute:
+        return self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __hash__(self) -> int:
+        return hash(frozenset(self._data.items()))
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({self._data!r})"
 
 
 class ParsedItem(BaseModel):
@@ -52,15 +93,23 @@ class ParsedItem(BaseModel):
     * a size with a count, or an explicit container ("milk 1 L x2",
       "a 3-liter carton"), sets ``pack_size`` and ``count``;
     * a count only ("milk x2", "6 tomatoes") sets ``count``.
+
+    ``attributes`` is read-only: later steps add defaults by validating a new item,
+    not with ``model_copy(update=...)``, which skips validation and the read-only wrapper.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    item: str = Field(min_length=1)
-    count: int = Field(default=1, ge=1)
+    item: Text
+    count: int = Field(default=1, ge=1, le=MAX_COUNT, strict=True)
     pack_size: Quantity | None = None
     total_quantity: Quantity | None = None
-    attributes: dict[str, Attribute] = Field(default_factory=dict)
+    attributes: Annotated[
+        Mapping[Text, Attribute],
+        Field(max_length=MAX_ATTRIBUTES),
+        AfterValidator(ReadOnlyAttributes),
+        PlainSerializer(dict, return_type=dict[str, Attribute]),
+    ] = Field(default_factory=ReadOnlyAttributes)
 
     @model_validator(mode="after")
     def _at_most_one_size(self) -> Self:
