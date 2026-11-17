@@ -186,11 +186,30 @@ def address_query(address: str | None, city: str | None) -> str | None:
     return ", ".join([*parts, COUNTRY])
 
 
-def _cached(previous: pl.DataFrame | None) -> dict[str, dict[str, object]]:
+class _Earlier(NamedTuple):
+    """A store's result from the previous run, kept while its address is unchanged."""
+
+    address: str | None
+    city: str | None
+    status: str
+    coordinates: Coordinates | None
+
+
+def _cached(previous: pl.DataFrame | None) -> dict[str, _Earlier]:
     if previous is None:
         return {}
     usable = previous.filter(pl.col("geocode_status").is_in(_CACHED_STATUSES))
-    return {row["store_id"]: row for row in usable.iter_rows(named=True)}
+    return {
+        row["store_id"]: _Earlier(
+            row["address"],
+            row["city"],
+            row["geocode_status"],
+            None
+            if row["lat"] is None or row["lon"] is None
+            else Coordinates(row["lat"], row["lon"]),
+        )
+        for row in usable.iter_rows(named=True)
+    }
 
 
 def geocode_stores(
@@ -216,10 +235,8 @@ def geocode_stores(
         earlier = cache.get(store_id)
         if store_id in overrides:
             found, status = overrides[store_id], STATUS_OVERRIDE
-        elif earlier is not None and (earlier["address"], earlier["city"]) == (address, city):
-            status = str(earlier["geocode_status"])
-            if status == STATUS_GEOCODED:
-                found = Coordinates(earlier["lat"], earlier["lon"])  # type: ignore[arg-type]
+        elif earlier is not None and (earlier.address, earlier.city) == (address, city):
+            status, found = earlier.status, earlier.coordinates
         elif (query := address_query(address, city)) is None:
             status = STATUS_NOT_FOUND
             logger.warning("store %s has no address to geocode", store_id)
