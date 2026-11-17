@@ -91,6 +91,7 @@ def assert_price_layout(prices: pl.DataFrame, chain: str) -> None:
     assert prices.columns == PRICE_SCHEMA.names()
     assert prices["chain"].unique().to_list() == [chain]
     required = ["store_id", "item_code", "name", "is_weighed", "price", "source_file"]
+    required += ["source_timestamp"]
     assert sum(prices.select(pl.col(required).null_count()).row(0)) == 0
     assert (prices["price"] > 0).all()
     assert_no_placeholders(prices)

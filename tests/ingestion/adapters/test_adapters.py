@@ -1,6 +1,8 @@
 """Adapter tests run against sample files cut from each chain's real data."""
 
+from datetime import datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -12,6 +14,7 @@ from shopping_agent.ingestion.adapters import (
     YeshHesedAdapter,
 )
 from shopping_agent.ingestion.adapters.base import read_expanded
+from shopping_agent.ingestion.adapters.layout import ISRAEL_TIME_ZONE
 from support import (
     OSHER_PRICES,
     RAW,
@@ -22,6 +25,9 @@ from support import (
     stage_shufersal,
     write_store_snapshots,
 )
+
+ISRAEL = ZoneInfo(ISRAEL_TIME_ZONE)
+OSHER_FILE = "Price7290103152017-001-006-20261114-090012.xml"
 
 
 class TestReadExpanded:
@@ -78,7 +84,9 @@ class TestOsherAd:
         assert not prices["unit_of_measure"].str.ends_with(" ").any()
 
     def test_full_and_update_price_files_are_both_read(self, tmp_path):
-        full = stage_fixture(tmp_path, OSHER_PRICES, file_name="PriceFull.xml")
+        full = stage_fixture(
+            tmp_path, OSHER_PRICES, file_name=OSHER_FILE.replace("Price", "PriceFull")
+        )
         full.rename(full.with_name("price_full_file_osher_ad.csv"))
         stage_fixture(tmp_path, OSHER_PRICES)
 
@@ -87,7 +95,7 @@ class TestOsherAd:
         assert_price_layout(prices, "osher_ad")
         # The full list comes first, then the updates; rows are kept as published.
         full_rows, update_rows = prices.head(218), prices.tail(218)
-        assert full_rows["source_file"][0] == "PriceFull.xml"
+        assert full_rows["source_file"][0] == OSHER_FILE.replace("Price", "PriceFull")
         assert full_rows.drop("source_file").equals(update_rows.drop("source_file"))
 
 
@@ -112,7 +120,10 @@ class TestMaayan2000:
         assert potatoes["unit"] == "קילוגרם"
         assert potatoes["is_weighed"] is True
         assert potatoes["manufacturer"] is None
-        assert potatoes["source_timestamp"] is not None
+        # The publish time comes from the file name; the price change time is kept apart.
+        assert potatoes["source_file"] == "Price7290058159628-000-018-20261114-000237.xml"
+        assert potatoes["source_timestamp"] == datetime(2026, 11, 14, 0, 2, 37, tzinfo=ISRAEL)
+        assert potatoes["price_updated_at"] == datetime(2026, 11, 14, 0, 3, tzinfo=ISRAEL)
 
 
 class TestYeshHesed:
@@ -146,8 +157,12 @@ class TestYeshHesed:
         assert beans["unit"] == "גרם"
         assert beans["qty_in_package"] == 1.0
         assert beans["is_weighed"] is False
-        # Shufersal timestamps carry no milliseconds.
-        assert prices["source_timestamp"].null_count() == 0
+        # The publish time comes from the file name. Shufersal's own timestamps carry
+        # no milliseconds.
+        published = datetime(2026, 11, 14, 3, 0, 0, tzinfo=ISRAEL)
+        assert prices["source_timestamp"].unique().to_list() == [published]
+        assert beans["price_updated_at"] == datetime(2016, 11, 13, 7, 45, tzinfo=ISRAEL)
+        assert prices["price_updated_at"].null_count() == 0
 
     def test_stores_can_be_passed_in_so_the_store_file_is_not_read_again(self, tmp_path):
         stores = YeshHesedAdapter().read_stores(RAW)
@@ -175,12 +190,47 @@ class TestIsraelLocalTime:
             ("2026-10-25T01:30:00", "2026-10-25T01:30:00+03:00"),
         ],
     )
-    def test_published_time_is_read_as_israel_local_time(self, tmp_path, published, expected):
+    def test_the_price_change_time_is_read_as_israel_local_time(
+        self, tmp_path, published, expected
+    ):
         stage_fixture(tmp_path, OSHER_PRICES, priceupdatetime=published)
 
-        timestamp = OsherAdAdapter().read_prices(tmp_path)["source_timestamp"][0]
+        timestamp = OsherAdAdapter().read_prices(tmp_path)["price_updated_at"][0]
 
         assert timestamp.isoformat() == expected
+
+    @pytest.mark.parametrize(
+        ("file_name", "expected"),
+        [
+            (OSHER_FILE, "2026-11-14T09:00:12+02:00"),
+            ("Price7290103152017-001-006-20260701-0930.xml", "2026-07-01T09:30:00+03:00"),
+            ("PriceFull7290103152017-001-006-20260115-000237", "2026-01-15T00:02:37+02:00"),
+            # The repeated hour of the clocks going back is read as the earlier one.
+            ("Price7290103152017-001-006-20261025-013000.xml", "2026-10-25T01:30:00+03:00"),
+        ],
+    )
+    def test_the_publish_time_is_read_from_the_file_name_as_israel_local_time(
+        self, tmp_path, file_name, expected
+    ):
+        stage_fixture(tmp_path, OSHER_PRICES, file_name=file_name)
+
+        prices = OsherAdAdapter().read_prices(tmp_path)
+
+        assert prices["source_timestamp"][0].isoformat() == expected
+        assert prices["source_file"][0] == file_name
+
+    def test_the_publish_time_is_not_the_price_change_time(self):
+        prices = OsherAdAdapter().read_prices(RAW)
+
+        # Items changed price on many different days, all before their file was published.
+        assert prices["price_updated_at"].n_unique() > 1
+        assert (prices["price_updated_at"] < prices["source_timestamp"]).all()
+        # The publish time belongs to the file: the sample's two files give two values.
+        assert prices["source_timestamp"].n_unique() == prices["source_file"].n_unique() == 2
+        assert sorted(prices["source_timestamp"].unique()) == [
+            datetime(2026, 11, 14, 9, 0, 12, tzinfo=ISRAEL),
+            datetime(2026, 11, 14, 19, 0, 11, tzinfo=ISRAEL),
+        ]
 
     def test_store_snapshot_time_is_israel_local_time(self):
         stores = OsherAdAdapter().read_stores(RAW)

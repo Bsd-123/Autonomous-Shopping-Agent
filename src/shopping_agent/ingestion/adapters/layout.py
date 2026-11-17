@@ -23,6 +23,7 @@ PRICE_SCHEMA = pl.Schema(
         "unit_of_measure": pl.String(),
         "qty_in_package": pl.Float64(),
         "price": pl.Decimal(12, 2),
+        "price_updated_at": SOURCE_TIME,
         "source_timestamp": SOURCE_TIME,
         "source_file": pl.String(),
     }
