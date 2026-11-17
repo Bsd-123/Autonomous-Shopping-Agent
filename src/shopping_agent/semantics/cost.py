@@ -31,7 +31,7 @@ TYPICAL_PACK_MIN_RATIO = 0.8
 TYPICAL_PACK_MAX_RATIO = 1.5
 GRAMS_PER_KILOGRAM = 1000
 # Sizes are compared as floats; this absorbs representation error only.
-_TOLERANCE = 1e-9
+SIZE_TOLERANCE = 1e-9
 
 
 class Mismatch(StrEnum):
@@ -116,11 +116,11 @@ def _packaged(
     if request.total_quantity is not None:
         if request.total_quantity.unit != pack.unit:
             return Mismatch.UNIT
-        packs = max(1, ceil(request.total_quantity.value / pack.value - _TOLERANCE))
+        packs = max(1, ceil(request.total_quantity.value / pack.value - SIZE_TOLERANCE))
     elif request.pack_size is not None:
         if request.pack_size.unit != pack.unit:
             return Mismatch.UNIT
-        if not isclose(request.pack_size.value, pack.value, rel_tol=_TOLERANCE):
+        if not isclose(request.pack_size.value, pack.value, rel_tol=SIZE_TOLERANCE):
             return Mismatch.PACK_SIZE
         packs = request.count
     else:
@@ -129,7 +129,9 @@ def _packaged(
                 return Mismatch.UNIT
             ratio = pack.value / typical_pack.value
             if not (
-                TYPICAL_PACK_MIN_RATIO - _TOLERANCE <= ratio <= TYPICAL_PACK_MAX_RATIO + _TOLERANCE
+                TYPICAL_PACK_MIN_RATIO - SIZE_TOLERANCE
+                <= ratio
+                <= TYPICAL_PACK_MAX_RATIO + SIZE_TOLERANCE
             ):
                 return Mismatch.NOT_TYPICAL_PACK
         packs = request.count
@@ -151,5 +153,6 @@ def candidate_cost(
     """
     if product.is_weighed:
         return _weighed(request, product, typical_unit_weight)
-    assert product.pack is not None  # checked when the product was built
+    if product.pack is None:  # unreachable: PricedProduct refuses a packaged product without one
+        raise ValueError("a packaged product needs a pack size")
     return _packaged(request, product, product.pack, typical_pack)
