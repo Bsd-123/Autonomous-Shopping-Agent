@@ -7,7 +7,6 @@ whole drift. A violation fails the run: nothing is built or deployed from it.
 """
 
 from collections.abc import Mapping
-from typing import Any
 
 import pandera.polars as pa
 import polars as pl
@@ -23,6 +22,7 @@ VALIDATION_STATUSES = (VALIDATION_NOT_RUN, VALIDATION_PASSED, VALIDATION_FAILED)
 PRICE_FLAGS = ("ok", "carried_forward")
 BASE_UNITS = ("ml", "g", "unit")
 STORE_ID_PATTERN = r"^[a-z0-9][a-z0-9_]*:[0-9]+$"
+PolarsType = type[pl.DataType] | pl.DataType
 UTC_TIME = pl.Datetime("ms", "UTC")
 MAX_FAILURES_SHOWN = 10
 
@@ -41,11 +41,11 @@ class SchemaDriftError(ValueError):
         super().__init__(f"schema validation failed: {text}")
 
 
-def _required(dtype: Any, *checks: pa.Check, unique: bool = False) -> pa.Column:
+def _required(dtype: PolarsType, *checks: pa.Check, unique: bool = False) -> pa.Column:
     return pa.Column(dtype, list(checks), nullable=False, unique=unique)
 
 
-def _optional(dtype: Any, *checks: pa.Check) -> pa.Column:
+def _optional(dtype: PolarsType, *checks: pa.Check) -> pa.Column:
     return pa.Column(dtype, list(checks), nullable=True)
 
 
