@@ -175,6 +175,12 @@ class TestWeighedByWeight:
 
         assert candidate_cost(request, TOMATOES) == CandidateCost(cost_agorot=518, weight_g=750)
 
+    def test_a_total_weight_is_not_multiplied_by_a_count(self):
+        # The same request costs one pack for a packaged product; a weighed one agrees.
+        request = ParsedItem(item="tomatoes", count=2, total_quantity=g(1000))
+
+        assert candidate_cost(request, TOMATOES) == CandidateCost(cost_agorot=690, weight_g=1000)
+
     def test_a_volume_does_not_fit_a_weighed_product(self):
         request = ParsedItem(item="tomatoes", total_quantity=ml(500))
 
