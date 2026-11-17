@@ -82,8 +82,10 @@ class CandidateCost:
 def _weighed_cost(price_per_kg: int, grams: float, is_estimate: bool) -> CandidateCost:
     # Exact decimal arithmetic, with the single rounding at the end.
     exact = Decimal(price_per_kg) * Decimal(str(grams)) / GRAMS_PER_KILOGRAM
+    # Anything bought costs at least one agora; a cost of zero means "not listed" downstream.
+    rounded = int(exact.quantize(Decimal(1), rounding=ROUND_HALF_UP))
     return CandidateCost(
-        cost_agorot=int(exact.quantize(Decimal(1), rounding=ROUND_HALF_UP)),
+        cost_agorot=max(1, rounded),
         weight_g=grams,
         is_estimate=is_estimate,
     )
