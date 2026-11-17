@@ -50,6 +50,23 @@ Every adapter returns two frames with the same columns and types for all chains,
 - A change in the shape of the data also raises `RawFormatError`: a store or price file without rows, a Yesh Hesed sub-chain with no stores or no prices (for example after a rename), and two stores that share a `store_id` in the newest snapshot (such as `011` and `11`). An empty chain is never returned as if it were valid data.
 - `read_prices(raw_dir, stores)` takes the frame from `read_stores` for every adapter, so callers can loop over `ADAPTERS` the same way. When it is given, a price row for a store the frame does not list raises `RawFormatError` (Osher Ad, Maayan 2000), or is left out because it belongs to another sub-chain (Yesh Hesed, which also avoids reading the store file twice). Without it, Osher Ad and Maayan 2000 return their rows unchecked.
 
+## Product keys
+
+`src/shopping_agent/ingestion/product_key.py` turns a chain's item code into a `product_key`.
+
+| Code | Key | Example |
+|---|---|---|
+| A real barcode | The barcode as 13 digits, shared by every chain | `811146031465` becomes `0811146031465` |
+| Anything else | `<chain>:<code>`, never joined across chains | `116` at Maayan 2000 becomes `maayan_2000:116` |
+
+A code is a real barcode when it has only digits, has 8, 11, 12 or 13 of them, ends with the correct GS1 check digit, and is not in a range GS1 reserves for numbering inside one company (prefixes 020-029 and 200-299).
+
+- **Eleven digits** are accepted because the chains publish UPC-A codes with the leading zero dropped. All 991 such codes in the files of 2026-11-14/15 pass the check digit; chance would pass one in ten.
+- **Thirteen digits with leading zeros** is the single written form, so a product gets the same key whether or not a chain dropped the zeros.
+- **Shorter codes** are chain-internal numbers. About one in ten passes the check digit by chance, which is why length is checked too.
+
+On the files of 2026-11-14/15 the three chains list 31,630 codes, of which 31,142 are barcodes. They form 22,362 distinct keys; 6,884 are listed by at least two chains and 2,384 by all three.
+
 ## Sample files
 
 `tests/fixtures/raw/` holds small samples taken from the dataset on 2026-11-15, used by the adapter tests. Rows are copied as published. The Shufersal price sample joins two slices of the full file (the first 40 rows, and the first 160 rows of Yesh Hesed store 611); the first row of the second slice has its "same as above" cells written out so it does not depend on rows that were left out. They are redistributed under the dataset's licence.
