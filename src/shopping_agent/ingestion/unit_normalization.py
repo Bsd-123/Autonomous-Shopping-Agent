@@ -34,7 +34,7 @@ is for, not how much it holds, and is ignored.
 """
 
 import re
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import polars as pl
 
@@ -60,7 +60,7 @@ MAX_PACKS = 100
 MAX_LARGE_UNITS = 50
 
 # Canonical unit to base unit and factor. Lengths have no base unit.
-_BASE = {
+_BASE: dict[str, tuple[BaseUnit, float]] = {
     "גרם": ("g", 1.0),
     'ק"ג': ("g", 1000.0),
     'מ"ל': ("ml", 1.0),
@@ -105,7 +105,7 @@ def _canonical_unit(text: str | None) -> str | None:
     """The canonical unit named by a chain field such as "קילוגרם" or "100 מ"ל"."""
     if text is None:
         return None
-    spelling = _LEADING_AMOUNT.sub("", normalize_name(text))
+    spelling = _LEADING_AMOUNT.sub("", normalize_name(text) or "")
     return _CANONICAL_BY_SPELLING.get(spelling)
 
 
@@ -122,7 +122,7 @@ def _from_fields(
 
 class _NameSizes(NamedTuple):
     measure: _Size | None
-    count: _Size | None
+    counted: _Size | None
     measure_is_multipack: bool
     count_is_multipack: bool
 
@@ -200,8 +200,8 @@ def base_size(
         return BaseSize(*fields, "fields")
     if named.measure is not None and _is_plausible_pack(named.measure):
         return BaseSize(*named.measure, "name")
-    if named.count is not None:
-        return BaseSize(*named.count, "name_multipack" if named.count_is_multipack else "name")
+    if named.counted is not None:
+        return BaseSize(*named.counted, "name_multipack" if named.count_is_multipack else "name")
     if fields is not None:
         return BaseSize(*fields, "fields")
     return BaseSize(1.0, "unit", "default")
@@ -221,7 +221,7 @@ def base_size_expr(
 ) -> pl.Expr:
     """Column form of ``base_size``: a struct of quantity, unit and source."""
 
-    def convert(row: dict) -> dict:
+    def convert(row: dict[str, Any]) -> dict[str, Any]:
         size = base_size(row[name], row[quantity], row[unit], row[unit_of_measure], row[is_weighed])
         return {
             "base_quantity": size.quantity,
