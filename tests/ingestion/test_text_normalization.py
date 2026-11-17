@@ -229,3 +229,24 @@ class TestOnRealSamples:
         result = frame.select(normalized=normalize_name_expr())["normalized"].to_list()
 
         assert result == [normalize_name(name) for name in names] + [None]
+
+
+class TestNormalizingTwice:
+    """Normalizing a normalized name changes nothing, so both sides of a search agree."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("חלב קג&", "חלב קג"),
+            ("M&M 45ג", "m&m 45 גרם"),
+            ("8&&", "8"),
+            ("5 & x2", "5*2"),
+            ("9.&קג", '9 ק"ג'),
+            ("יח'7ק'", "יח' 7 ק'"),
+        ],
+    )
+    def test_stray_marks_next_to_noise_are_removed_in_one_pass(self, text, expected):
+        once = normalize_name(text)
+
+        assert once == expected
+        assert normalize_name(once) == once
