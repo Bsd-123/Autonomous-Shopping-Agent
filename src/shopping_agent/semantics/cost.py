@@ -96,8 +96,10 @@ def _weighed(
     if size is not None:
         if size.unit != "g":
             return Mismatch.UNIT
-        # "1.5 kg tomatoes", or "tomatoes 1 kg x2", which is two kilograms.
-        return _weighed_cost(product.price_agorot, size.value * request.count, is_estimate=False)
+        # "1.5 kg tomatoes" is the whole amount, whatever the count; "tomatoes 1 kg x2"
+        # is two packs of a kilogram. This matches the packaged case.
+        multiplier = 1 if request.total_quantity is not None else request.count
+        return _weighed_cost(product.price_agorot, size.value * multiplier, is_estimate=False)
     if typical_unit_weight is None:
         return Mismatch.NO_TYPICAL_UNIT_WEIGHT
     if typical_unit_weight.unit != "g":
