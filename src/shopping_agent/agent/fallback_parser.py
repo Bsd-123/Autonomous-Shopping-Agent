@@ -120,7 +120,7 @@ def parse_line(line: str) -> ParsedItem | None:
         # Only numbers and sizes: the line names no item.
         return None
     try:
-        return ParsedItem(item=name, **fields)  # type: ignore[arg-type]
+        return ParsedItem.model_validate({"item": name, **fields})
     except ValidationError:
         # A number out of range: keep the line as typed, without reading numbers.
         try:
