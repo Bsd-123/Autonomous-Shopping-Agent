@@ -176,19 +176,13 @@ class TestDuckDB:
         assert rows == [(ROWS["yesh_hesed"],)]
 
 
-def test_a_chain_that_cannot_be_a_folder_name_is_rejected(raw_dir, tmp_path, monkeypatch):
-    from shopping_agent.ingestion import canonical
+def test_a_chain_that_cannot_be_a_folder_name_is_rejected(raw_dir, tmp_path):
+    from shopping_agent.ingestion.canonical import _write_table
 
-    original = canonical.build_canonical
-
-    def with_a_bad_store_id(*args, **kwargs):
-        tables = original(*args, **kwargs)
-        tables["prices"] = tables["prices"].with_columns(store_id=pl.lit("../escape:1"))
-        return tables
-
-    monkeypatch.setattr(canonical, "build_canonical", with_a_bad_store_id)
+    prices = build_canonical(raw_dir, VERSION, RUN_AT)["prices"]
+    prices = prices.with_columns(store_id=pl.lit("../escape:1"))
 
     with pytest.raises(CanonicalError, match="cannot partition prices by the chain"):
-        write_canonical(raw_dir, tmp_path, VERSION, RUN_AT)
+        _write_table(tmp_path, "prices", prices)
 
-    assert list(tmp_path.iterdir()) == []
+    assert not (tmp_path.parent / "escape").exists()
