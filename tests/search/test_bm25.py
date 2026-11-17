@@ -233,16 +233,16 @@ class TestScoring:
         assert index.scores("חלב חלב חלב").tolist() == index.scores("חלב").tolist()
 
     @pytest.mark.parametrize(
-        "fields",
+        ("fields", "message"),
         [
-            {"k1": -1.0},
-            {"b": 1.5},
-            {"word_weight": -1.0},
-            {"word_weight": 0.0, "ngram_weight": 0.0},
+            ({"k1": -1.0}, "k1 >= 0"),
+            ({"b": 1.5}, "0 <= b <= 1"),
+            ({"word_weight": -1.0}, "cannot be negative"),
+            ({"word_weight": 0.0, "ngram_weight": 0.0}, "must be positive"),
         ],
     )
-    def test_bad_parameters_are_rejected(self, fields):
-        with pytest.raises(ValueError):
+    def test_bad_parameters_are_rejected(self, fields, message):
+        with pytest.raises(ValueError, match=message):
             Bm25Config(**fields)
 
 
