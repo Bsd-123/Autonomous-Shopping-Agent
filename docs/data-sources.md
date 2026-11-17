@@ -38,15 +38,16 @@ Every adapter returns two frames with the same columns and types for all chains,
 
 **Stores:** `chain`, `store_id`, `name`, `address`, `city`, `zipcode`, `source_timestamp`, `source_file`.
 
-**Prices:** `chain`, `store_id`, `item_code`, `name`, `manufacturer`, `is_weighed`, `quantity`, `unit`, `unit_of_measure`, `qty_in_package`, `price`, `source_timestamp`, `source_file`.
+**Prices:** `chain`, `store_id`, `item_code`, `name`, `manufacturer`, `is_weighed`, `quantity`, `unit`, `unit_of_measure`, `qty_in_package`, `price`, `price_updated_at`, `source_timestamp`, `source_file`.
 
 - `store_id` is `<chain>:<store number>`, with leading zeros removed, so it is unique across chains.
 - `city` is the raw value from the file, usually a Central Bureau of Statistics locality code (Bnei Brak is `6100`).
+- `source_timestamp` in the prices frame is when the chain published the price file, read from the file name. `price_updated_at` is the item's last price change as stated by the chain.
 - `price` is the shelf price in shekels as published. Conversion to integer agorot, cleaning, unit normalization and the canonical tables are later pipeline steps.
-- `source_timestamp` is Israel local time (`Asia/Jerusalem`). The files carry no UTC offset, so this is an assumption about how the chains publish; it keeps the timestamps comparable with timezone-aware "now" values in the data-quality report. A time that does not exist (the hour skipped when clocks go forward) raises `RawFormatError`; a repeated hour is read as the earlier one.
+- Every timestamp (`source_timestamp` and `price_updated_at` in both frames) is Israel local time (`Asia/Jerusalem`). The files carry no UTC offset, so this is an assumption about how the chains publish; it keeps the timestamps comparable with timezone-aware "now" values in the data-quality report. A time that does not exist (the hour skipped when clocks go forward) raises `RawFormatError`; a repeated hour is read as the earlier one.
 - The store files can hold several daily snapshots. The adapters keep the newest one, chosen by parsed time. Every snapshot row is validated, including older ones.
 - Adapters return every row found in the price files, including repeated listings of the same item; duplicates are resolved in the cleaning step.
-- A value that is present but does not parse (a store number, price, quantity, weighed flag or timestamp), or a store row without an update time, raises `RawFormatError`. It never becomes a silent null. Prices must have at most two decimal places, and quantities must be finite numbers (not `NaN` or infinity).
+- A value that is present but does not parse (a store number, price, quantity, weighed flag or timestamp), a price file name that does not end with a date and a time, or a store row without an update time, raises `RawFormatError`. It never becomes a silent null. Prices must have at most two decimal places, and quantities must be finite numbers (not `NaN` or infinity).
 - A change in the shape of the data also raises `RawFormatError`: a store or price file without rows, a Yesh Hesed sub-chain with no stores or no prices (for example after a rename), and two stores that share a `store_id` in the newest snapshot (such as `011` and `11`). An empty chain is never returned as if it were valid data.
 - `read_prices(raw_dir, stores)` takes the frame from `read_stores` for every adapter, so callers can loop over `ADAPTERS` the same way. When it is given, a price row for a store the frame does not list raises `RawFormatError` (Osher Ad, Maayan 2000), or is left out because it belongs to another sub-chain (Yesh Hesed, which also avoids reading the store file twice). Without it, Osher Ad and Maayan 2000 return their rows unchecked.
 

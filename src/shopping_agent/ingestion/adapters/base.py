@@ -71,14 +71,15 @@ class Parsed(NamedTuple):
     expression: pl.Expr
 
 
-def parse_local_time(raw_time: pl.Expr) -> pl.Expr:
+def parse_local_time(raw_time: pl.Expr, time_format: str | None = None) -> pl.Expr:
     """Parse a published timestamp, which carries no offset, as Israel local time.
 
-    A time that does not exist (the hour skipped when clocks go forward) becomes
-    null and so fails the parse check; an ambiguous one (the repeated hour) is
-    read as the earlier of the two.
+    The format is inferred from the values unless ``time_format`` is given. A time
+    that does not exist (the hour skipped when clocks go forward) becomes null and
+    so fails the parse check; an ambiguous one (the repeated hour) is read as the
+    earlier of the two.
     """
-    return raw_time.str.to_datetime(strict=False, time_unit="ms").dt.replace_time_zone(
+    return raw_time.str.to_datetime(time_format, strict=False, time_unit="ms").dt.replace_time_zone(
         ISRAEL_TIME_ZONE, ambiguous="earliest", non_existent="null"
     )
 
@@ -171,6 +172,20 @@ def read_expanded(
         .select(pl.when(~expanded.is_in(markers)).then(expanded).name.keep())
         .collect()
     )
+
+
+def _file_published_at() -> pl.Expr:
+    """When the chain published the price file, read from its name.
+
+    Names end with a date and a time of four or six digits, for example
+    ``Price7290103152017-001-006-20261114-090012.xml``. The item's own
+    ``priceupdatetime`` is the last price change and can be years old, so it
+    says nothing about how fresh the listing is. A name that does not end this
+    way gives null, which the parse check turns into an error.
+    """
+    day = pl.col("file_name").str.extract(r"-(\d{8})-(?:\d{4}|\d{6})(?:\.|$)", 1)
+    clock = pl.col("file_name").str.extract(r"-\d{8}-(\d{4}|\d{6})(?:\.|$)", 1).str.pad_end(6, "0")
+    return parse_local_time(day + clock, "%Y%m%d%H%M%S")
 
 
 class ChainAdapter:
@@ -293,9 +308,10 @@ class ChainAdapter:
                         price.cast(pl.Decimal(12, 2), strict=False)
                     ),
                 ),
-                "source_timestamp": Parsed(
+                "price_updated_at": Parsed(
                     "priceupdatetime", parse_local_time(pl.col("priceupdatetime"))
                 ),
+                "source_timestamp": Parsed("file_name", _file_published_at()),
                 "source_file": "file_name",
             },
             PRICE_SCHEMA,

@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "duckdb>=1.0",
     "mypy>=1.10",
     "pytest>=8.0",
     "ruff>=0.6",
@@ -26,11 +27,11 @@ packages = ["src/shopping_agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests/ingestion/adapters"]
+pythonpath = ["tests/ingestion", "tests/ingestion/adapters"]
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests", "tests/ingestion/adapters"]
+src = ["src", "tests", "tests/ingestion", "tests/ingestion/adapters"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
