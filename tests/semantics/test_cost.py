@@ -155,7 +155,7 @@ class TestWeighedByWeight:
             (690, 150, 104),  # 103.5 rounds up
             (699, 333, 233),  # 232.767
             (699, 100, 70),  # 69.9
-            (1, 400, 0),  # 0.4
+            (1, 400, 1),  # 0.4 rounds to 0, but a purchase costs at least one agora
             (1090, 1234.5, 1346),  # 1345.605
         ],
     )
@@ -180,6 +180,12 @@ class TestWeighedByWeight:
         request = ParsedItem(item="tomatoes", count=2, total_quantity=g(1000))
 
         assert candidate_cost(request, TOMATOES) == CandidateCost(cost_agorot=690, weight_g=1000)
+
+    def test_a_tiny_weight_still_costs_one_agora(self):
+        # 1 g at 6.90 per kg is 0.69 agorot, which must not become a free item.
+        request = ParsedItem(item="tomatoes", total_quantity=g(1))
+
+        assert candidate_cost(request, TOMATOES).cost_agorot == 1
 
     def test_a_volume_does_not_fit_a_weighed_product(self):
         request = ParsedItem(item="tomatoes", total_quantity=ml(500))
