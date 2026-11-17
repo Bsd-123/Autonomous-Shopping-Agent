@@ -20,7 +20,7 @@ from enum import StrEnum
 
 from shopping_agent.contracts import ParsedItem, Quantity
 from shopping_agent.semantics.cost import (
-    SIZESIZE_TOLERANCE,
+    SIZE_TOLERANCE,
     TYPICAL_PACK_MIN_RATIO,
     CandidateCost,
     Mismatch,
