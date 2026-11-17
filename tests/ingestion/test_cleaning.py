@@ -305,17 +305,17 @@ class TestConfig:
         assert cleaned.changes["reason"].to_list() == ["implausible_change", "large_change"]
 
     @pytest.mark.parametrize(
-        "fields",
+        ("fields", "message"),
         [
-            {"min_price_agorot": 0},
-            {"large_change_ratio": 1.0},
-            {"large_change_ratio": 10.0},
-            {"implausible_ratio": 1.5},
-            {"staleness_days": -1},
+            ({"min_price_agorot": 0}, "at least 1 agora"),
+            ({"large_change_ratio": 1.0}, "1 < large change < implausible"),
+            ({"large_change_ratio": 10.0}, "1 < large change < implausible"),
+            ({"implausible_ratio": 1.5}, "1 < large change < implausible"),
+            ({"staleness_days": -1}, "cannot be negative"),
         ],
     )
-    def test_bad_thresholds_are_rejected(self, fields):
-        with pytest.raises(ValueError):
+    def test_bad_thresholds_are_rejected(self, fields, message):
+        with pytest.raises(ValueError, match=message):
             CleaningConfig(**fields)
 
 
