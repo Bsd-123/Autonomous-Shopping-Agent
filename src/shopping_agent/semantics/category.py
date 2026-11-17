@@ -12,6 +12,7 @@ for it always land in the same category.
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import cache
 from typing import Protocol
 
 # Words are separated by spaces and by punctuation that the chains use between
@@ -51,6 +52,12 @@ def words(text: str | None) -> tuple[str, ...]:
     spaced = _LETTER_THEN_DIGIT.sub(" ", text)
     tokens = (token.strip(_EDGES).casefold() for token in _SEPARATORS.split(spaced))
     return tuple(token for token in tokens if token)
+
+
+@cache
+def _keyword_words(keyword: str) -> tuple[str, ...]:
+    """The words of a profile keyword; a profile is matched against every name, so cache them."""
+    return words(keyword)
 
 
 def _is_content(word: str) -> bool:
@@ -101,7 +108,7 @@ def assign_category(
     best: tuple[int, str] | None = None
     for category, profile in profiles.items():
         for keyword in profile.keywords:
-            keyword_words = words(keyword)
+            keyword_words = _keyword_words(keyword)
             if not keyword_words or leading[: len(keyword_words)] != keyword_words:
                 continue
             if best is None or len(keyword_words) > best[0]:
@@ -111,6 +118,6 @@ def assign_category(
 
     category = best[1]
     for exclude in profiles[category].exclude_keywords:
-        if (exclude_words := words(exclude)) and _contains(name_words, exclude_words):
+        if (exclude_words := _keyword_words(exclude)) and _contains(name_words, exclude_words):
             return None
     return category
