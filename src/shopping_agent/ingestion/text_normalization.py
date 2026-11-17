@@ -80,6 +80,8 @@ _KEEP = re.compile(
         )
     )
 )
+# An ampersand stays only between two letters or digits; next to anything else it is noise.
+_LOOSE_AMPERSAND = re.compile(r"(?<![^\W_])&|&(?![^\W_])")
 _SPACE_BEFORE_PERCENT = re.compile(r"(?<=\d)\s%")
 _PERCENT_THEN_TEXT = re.compile(r"%(?=\S)")
 _TIMES = re.compile(r"(?<=\d)\s?[*x×]\s?(?=\d)")
@@ -88,7 +90,7 @@ _DIGIT_THEN_LETTER = re.compile(rf"(?<=\d)(?=[{_HEBREW}])")
 _UNIT_AFTER_NUMBER = re.compile(
     r"(?<![\w.,])(\d+(?:[.,]\d+)?)\s?("
     + "|".join(re.escape(variant) for variant in sorted(_UNIT_BY_VARIANT, key=len, reverse=True))
-    + rf")(?![{_HEBREW}])(?!['\"][{_HEBREW}])"
+    + rf")(?![{_HEBREW}'\"])"
 )
 
 
@@ -116,6 +118,7 @@ def normalize_name(name: str | None) -> str | None:
     text = _TWO_GERESH.sub(GERSHAYIM, text)
     text = _WHITESPACE.sub(" ", text).lower()
     text = _WHITESPACE.sub(" ", _strip_noise(text))
+    text = _WHITESPACE.sub(" ", _LOOSE_AMPERSAND.sub(" ", text))
     text = _PERCENT_THEN_TEXT.sub("% ", _SPACE_BEFORE_PERCENT.sub("%", text))
     text = _TIMES.sub("*", text)
     text = _DIGIT_THEN_LETTER.sub(" ", _LETTER_THEN_DIGIT.sub(" ", text))
