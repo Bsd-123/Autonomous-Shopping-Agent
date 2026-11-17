@@ -232,3 +232,13 @@ class TestRobustness:
         for item in parse_list(text).items:
             assert ParsedItem.model_validate(item.model_dump()) == item
             assert item.pack_size is None or item.total_quantity is None
+
+    @pytest.mark.parametrize(
+        "line", ["חלב {digits}", "חלב x{digits}", "חלב {digits}x", "חלב {digits} יחידות"]
+    )
+    def test_a_number_beyond_the_integer_conversion_limit_does_not_raise(self, line):
+        # A list may hold 5,000 characters, and Python refuses to read 4,300+ digits as an int.
+        parsed = parse_line(line.format(digits="9" * 4_400))
+
+        assert parsed is not None
+        assert parsed.count == 1

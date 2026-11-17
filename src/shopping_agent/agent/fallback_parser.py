@@ -39,17 +39,20 @@ _SIZE_UNITS: dict[str, tuple[Literal["ml", "g"], float]] = {
 _COUNT_UNIT = "יחידות"
 
 _NUMBER = r"(\d+(?:[.,]\d+)?)"
+# A count has at most this many digits. A longer number stays in the name, and
+# ``int`` is never asked to read a digit string beyond Python's conversion limit.
+_COUNT = r"(\d{1,6})"
 _NOT_IN_A_WORD = r"(?<![\w.,%*])"
 _UNIT_END = r"(?![א-ת\"'])"
 _PERCENT = re.compile(rf"{_NOT_IN_A_WORD}{_NUMBER}%")
 _SIZE = re.compile(
     rf"{_NOT_IN_A_WORD}{_NUMBER} ({'|'.join(map(re.escape, _SIZE_UNITS))}){_UNIT_END}"
 )
-_UNITS = re.compile(rf"{_NOT_IN_A_WORD}(\d+) {_COUNT_UNIT}{_UNIT_END}")
-_TIMES = re.compile(r"(?<![^\W\d_])x ?(\d+)(?![\w.,%])|(?<![\w.,%])(\d+) ?x(?![^\W\d_])")
+_UNITS = re.compile(rf"{_NOT_IN_A_WORD}{_COUNT} {_COUNT_UNIT}{_UNIT_END}")
+_TIMES = re.compile(rf"(?<![^\W\d_])x ?{_COUNT}(?![\w.,%])|(?<![\w.,%]){_COUNT} ?x(?![^\W\d_])")
 # A number that is followed by a unit, even one that is not a size, is not a count.
 _BARE = re.compile(
-    r"(?<![\w.,%*])(\d+)(?![\w.,%*])"
+    rf"(?<![\w.,%*]){_COUNT}(?![\w.,%*])"
     rf"(?! (?:{'|'.join(map(re.escape, CANONICAL_UNITS))}){_UNIT_END})"
 )
 _LETTER = re.compile(r"[^\W\d_]")
