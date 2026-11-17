@@ -35,8 +35,10 @@ BARCODE_LENGTHS = (8, 11, 12, 13)
 BARCODE_DIGITS = 13
 # GS1 prefixes 020-029 and 200-299 are for numbering inside one company, such
 # as price-embedded labels for weighed goods. Two chains can use the same
-# number for different products.
+# number for different products. An 8-digit code is padded with zeros, so its own
+# leading 2 has to be checked before padding.
 RESTRICTED_PREFIXES = ("02", "2")
+EAN8_LENGTH = 8
 
 _DIGITS = re.compile(r"[0-9]+")
 
@@ -55,6 +57,8 @@ def normalize_barcode(code: str | None) -> str | None:
         return None
     barcode = code.zfill(BARCODE_DIGITS)
     if barcode.startswith(RESTRICTED_PREFIXES):
+        return None
+    if len(code) == EAN8_LENGTH and code.startswith(RESTRICTED_PREFIXES[1]):
         return None
     return barcode
 
@@ -77,6 +81,8 @@ def barcode_expr(code: str | pl.Expr = "item_code") -> pl.Expr:
     )
     check_passes = (10 - weighted % 10) % 10 == digits[-1]
     restricted = pl.any_horizontal(padded.str.starts_with(prefix) for prefix in RESTRICTED_PREFIXES)
+    ean8_in_store = code.str.len_chars().eq(EAN8_LENGTH) & code.str.starts_with("2")
+    restricted = restricted | ean8_in_store
     return pl.when(check_passes & ~restricted).then(padded)
 
 

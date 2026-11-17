@@ -37,6 +37,7 @@ NOT_BARCODES = {
     "empty": "",
     "in-store EAN-13": "2000000000015",
     "in-store UPC-A": "200000000008",
+    "in-store EAN-8": "21610660",
 }
 
 
