@@ -20,6 +20,7 @@ from enum import StrEnum
 
 from shopping_agent.contracts import ParsedItem, Quantity
 from shopping_agent.semantics.cost import (
+    SIZESIZE_TOLERANCE,
     TYPICAL_PACK_MIN_RATIO,
     CandidateCost,
     Mismatch,
@@ -29,8 +30,6 @@ from shopping_agent.semantics.cost import (
 
 OVERBUY_LIMIT = 1.5
 SMALL_PACK_RATIO = TYPICAL_PACK_MIN_RATIO
-# Sizes are compared as floats; this absorbs representation error only.
-_TOLERANCE = 1e-9
 
 
 class Exclusion(StrEnum):
@@ -60,10 +59,10 @@ def quantity_exclusion(
     if (
         typical_pack is not None
         and typical_pack.unit == pack.unit
-        and pack.value < SMALL_PACK_RATIO * typical_pack.value * (1 - _TOLERANCE)
+        and pack.value < SMALL_PACK_RATIO * typical_pack.value * (1 - SIZE_TOLERANCE)
     ):
         return Exclusion.SMALL_PACK
-    if cost.packs * pack.value > OVERBUY_LIMIT * total.value * (1 + _TOLERANCE):
+    if cost.packs * pack.value > OVERBUY_LIMIT * total.value * (1 + SIZE_TOLERANCE):
         return Exclusion.OVERBUY
     return None
 
