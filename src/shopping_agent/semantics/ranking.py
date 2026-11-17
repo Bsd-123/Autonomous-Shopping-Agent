@@ -9,9 +9,7 @@ smaller one whenever the smaller one covers the request for less.
 from collections.abc import Hashable, Iterable, Mapping
 from fractions import Fraction
 
-from shopping_agent.semantics.cost import CandidateCost, PricedProduct
-
-GRAMS_PER_KILOGRAM = 1000
+from shopping_agent.semantics.cost import GRAMS_PER_KILOGRAM, CandidateCost, PricedProduct
 
 
 def unit_price(product: PricedProduct) -> Fraction:
