@@ -182,6 +182,10 @@ class TestIntegrity:
     def test_the_tables_of_a_run_pass(self, tables):
         require_integrity(tables)
 
+    def test_a_run_without_adapters_is_rejected(self, raw_dir):
+        with pytest.raises(CanonicalError, match="no chain adapters were given"):
+            build_canonical(raw_dir, VERSION, RUN_AT, [])
+
     def test_a_price_for_an_unlisted_store_is_rejected(self, tables):
         stores = tables["stores"].filter(pl.col("store_id") != "osher_ad:6")
 
