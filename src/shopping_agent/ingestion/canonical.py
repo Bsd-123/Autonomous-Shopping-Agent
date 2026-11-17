@@ -238,6 +238,8 @@ def build_canonical(
     """
     _require_valid_version(dataset_version)
     _require_aware(ingestion_timestamp)
+    if not adapters:
+        raise CanonicalError("no chain adapters were given")
     chain_stores = [adapter.read_stores(raw_dir) for adapter in adapters]
     chain_prices = [
         adapter.read_prices(raw_dir, stores)
