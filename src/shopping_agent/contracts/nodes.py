@@ -162,8 +162,8 @@ def _check_result_order(results: Sequence[ItemSearchResult]) -> None:
     require_item_order((result.item_index for result in results), "search results")
 
 
-class SearchOutput(Contract):
-    """One result per list item, in list order."""
+class ItemResults(Contract):
+    """A contract that carries one search result per list item, in list order."""
 
     results: SearchResults
 
@@ -171,18 +171,17 @@ class SearchOutput(Contract):
     def _one_result_per_item(self) -> Self:
         _check_result_order(self.results)
         return self
+
+
+class SearchOutput(ItemResults):
+    """What Search found for every item of the list."""
 
 
 # --- 3. Clarify -------------------------------------------------------------
 
 
-class ClarifyInput(Contract):
-    results: SearchResults
-
-    @model_validator(mode="after")
-    def _one_result_per_item(self) -> Self:
-        _check_result_order(self.results)
-        return self
+class ClarifyInput(ItemResults):
+    """The search results Clarify inspects."""
 
 
 class ClarifyQuestion(Contract):
@@ -215,14 +214,12 @@ class ClarifyOutput(Contract):
 # --- 4. Compare -------------------------------------------------------------
 
 
-class CompareInput(Contract):
-    results: SearchResults
+class CompareInput(ItemResults):
     location: Location
     radius_km: RadiusKm
 
     @model_validator(mode="after")
     def _ready_to_compare(self) -> Self:
-        _check_result_order(self.results)
         if any(result.status == "needs_clarification" for result in self.results):
             raise ValueError("an item still needs clarification and cannot be compared")
         return self
@@ -295,14 +292,8 @@ class DecideInput(Contract):
         return self
 
 
-class BasketLine(Contract):
-    """One item bought at one store."""
-
-    item_index: ItemIndex
-    store_id: StoreId
-    product_key: ProductKey
-    cost_agorot: Annotated[int, Field(gt=0, strict=True)]
-    is_estimate: bool = Field(default=False, strict=True)
+class BasketLine(ItemStoreCost):
+    """One item bought at one store: the cost cell the basket chose."""
 
 
 class BasketOption(Contract):

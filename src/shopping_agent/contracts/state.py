@@ -79,31 +79,45 @@ class GraphState(Contract):
 
     @model_validator(mode="after")
     def _outputs_agree(self) -> Self:
-        items = self.items
-        if self.search is not None and items is not None:
-            if tuple(result.item for result in self.search.results) != items:
-                raise ValueError("search results must carry the parsed items, one each, in order")
-        if self.clarify is not None and self.search is not None:
-            waiting = {
-                result.item_index
-                for result in self.search.results
-                if result.status == "needs_clarification"
-            }
-            asked = {question.item_index for question in self.clarify.questions}
-            if asked != waiting:
-                raise ValueError("clarify asks about exactly the items that need clarification")
-        if self.compare is not None and self.search is not None:
-            matched = {
-                result.item_index for result in self.search.results if result.status == "matched"
-            }
-            costed = {cost.item_index for cost in self.compare.costs}
-            if not costed <= matched:
-                raise ValueError("compare has costs for items that search did not match")
-            if self.decide is not None:
-                for option in self.decide.options:
-                    if option.item_indices != matched:
-                        raise ValueError("an option must account for every matched item")
-        if self.explain is not None and self.decide is not None:
-            if len(self.explain.option_explanations) != len(self.decide.options):
-                raise ValueError("there must be one explanation per option")
+        self._check_search_matches_items()
+        self._check_clarify_matches_search()
+        self._check_compare_and_decide_match_search()
+        self._check_explain_matches_decide()
         return self
+
+    def _check_search_matches_items(self) -> None:
+        if self.search is None or self.items is None:
+            return
+        if tuple(result.item for result in self.search.results) != self.items:
+            raise ValueError("search results must carry the parsed items, one each, in order")
+
+    def _check_clarify_matches_search(self) -> None:
+        if self.clarify is None or self.search is None:
+            return
+        waiting = {
+            result.item_index
+            for result in self.search.results
+            if result.status == "needs_clarification"
+        }
+        asked = {question.item_index for question in self.clarify.questions}
+        if asked != waiting:
+            raise ValueError("clarify asks about exactly the items that need clarification")
+
+    def _check_compare_and_decide_match_search(self) -> None:
+        if self.compare is None or self.search is None:
+            return
+        matched = {
+            result.item_index for result in self.search.results if result.status == "matched"
+        }
+        if not {cost.item_index for cost in self.compare.costs} <= matched:
+            raise ValueError("compare has costs for items that search did not match")
+        if self.decide is not None and any(
+            option.item_indices != matched for option in self.decide.options
+        ):
+            raise ValueError("an option must account for every matched item")
+
+    def _check_explain_matches_decide(self) -> None:
+        if self.explain is None or self.decide is None:
+            return
+        if len(self.explain.option_explanations) != len(self.decide.options):
+            raise ValueError("there must be one explanation per option")
