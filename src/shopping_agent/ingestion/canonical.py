@@ -327,6 +327,8 @@ def _write_table(folder: Path, name: str, table: pl.DataFrame) -> None:
 
 def price_files(folder: Path, chain: str | None = None) -> list[Path]:
     """The price files of a dataset folder, or of one chain in it, in chain order."""
+    if chain is not None and not CHAIN_PATTERN.fullmatch(chain):
+        raise CanonicalError(f"{chain!r} is not a chain name")
     pattern = f"{PARTITION_COLUMN}={chain if chain is not None else '*'}"
     return sorted((Path(folder) / PARTITIONED_TABLE).glob(f"{pattern}/*.parquet"))
 

@@ -111,6 +111,11 @@ class TestReadTable:
         with pytest.raises(CanonicalError, match="only prices is partitioned by chain"):
             read_table(folder, "stores", chain="osher_ad")
 
+    @pytest.mark.parametrize("chain", ["*", "osher_*", "../prices", ""])
+    def test_a_chain_is_a_name_and_never_a_pattern(self, folder, chain):
+        with pytest.raises(CanonicalError, match="is not a chain name"):
+            read_table(folder, "prices", chain=chain)
+
 
 class TestDuckDB:
     def test_the_folder_name_becomes_the_chain_column(self, folder):
