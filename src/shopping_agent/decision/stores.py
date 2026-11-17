@@ -40,13 +40,41 @@ class StoreInRange:
     distance_km: float
 
 
-def _has_coordinates(store: Store) -> bool:
-    return (
-        store.lat is not None
-        and store.lon is not None
-        and isfinite(store.lat)
-        and isfinite(store.lon)
-    )
+def _coordinates(store: Store) -> tuple[float, float] | None:
+    """The store's position, or ``None`` when it has no usable coordinates."""
+    if store.lat is None or store.lon is None:
+        return None
+    if not (isfinite(store.lat) and isfinite(store.lon)):
+        return None
+    return store.lat, store.lon
+
+
+def _nearest_first(store: StoreInRange) -> tuple[float, str]:
+    return (store.distance_km, store.store_id)
+
+
+def _group_in_range(
+    home: tuple[float, float], stores: Iterable[Store], radius_km: float, per_chain: int
+) -> dict[str, list[StoreInRange]]:
+    """The stores within the radius, grouped by chain, each chain's nearest ones first."""
+    by_chain: dict[str, list[StoreInRange]] = {}
+    seen: set[str] = set()
+    for store in stores:
+        if store.store_id in seen:
+            raise ValueError(f"store {store.store_id} was given twice")
+        seen.add(store.store_id)
+        position = _coordinates(store)
+        if position is None:
+            continue
+        distance = haversine_km(home, position)
+        if distance <= radius_km:
+            by_chain.setdefault(store.chain, []).append(
+                StoreInRange(store.store_id, store.chain, *position, distance)
+            )
+    return {
+        chain: sorted(candidates, key=_nearest_first)[:per_chain]
+        for chain, candidates in by_chain.items()
+    }
 
 
 def stores_in_range(
@@ -67,32 +95,12 @@ def stores_in_range(
     if per_chain < 1 or overall < 1:
         raise ValueError("the per-chain and overall caps must be at least 1")
 
-    by_chain: dict[str, list[StoreInRange]] = {}
-    seen: set[str] = set()
-    for store in stores:
-        if store.store_id in seen:
-            raise ValueError(f"store {store.store_id} was given twice")
-        seen.add(store.store_id)
-        if not _has_coordinates(store):
-            continue
-        assert store.lat is not None and store.lon is not None
-        distance = haversine_km(home, (store.lat, store.lon))
-        if distance <= radius_km:
-            by_chain.setdefault(store.chain, []).append(
-                StoreInRange(store.store_id, store.chain, store.lat, store.lon, distance)
-            )
-
-    def nearest_first(store: StoreInRange) -> tuple[float, str]:
-        return (store.distance_km, store.store_id)
-
-    for chain, candidates in by_chain.items():
-        by_chain[chain] = sorted(candidates, key=nearest_first)[:per_chain]
-
+    by_chain = _group_in_range(home, stores, radius_km, per_chain)
     # One round takes the next-nearest store of every chain that still has one.
     selected: list[StoreInRange] = []
     for rank in range(per_chain):
         round_ = [candidates[rank] for candidates in by_chain.values() if rank < len(candidates)]
-        selected.extend(sorted(round_, key=nearest_first)[: overall - len(selected)])
+        selected.extend(sorted(round_, key=_nearest_first)[: overall - len(selected)])
         if len(selected) >= overall:
             break
-    return tuple(sorted(selected, key=nearest_first))
+    return tuple(sorted(selected, key=_nearest_first))
