@@ -55,7 +55,10 @@ class TestIntegerAgorot:
     def test_the_written_files_hold_integers(self, raw_dir_module, tmp_path):
         folder = write_canonical(raw_dir_module, tmp_path / "canonical", VERSION, RUN_AT)
 
-        prices = pl.read_parquet(folder / "prices.parquet")
+        # One file, or one per chain when prices are partitioned: read whichever exists.
+        prices = pl.concat(
+            [pl.read_parquet(file) for file in sorted(folder.rglob("prices.parquet"))]
+        )
 
         assert prices.schema["price_agorot"] == pl.Int64()
         assert not any(dtype.is_float() for dtype in prices.schema.values())
