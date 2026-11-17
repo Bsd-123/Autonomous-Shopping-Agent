@@ -92,6 +92,8 @@ class TestValidation:
             ({"travel_agorot_per_km": float("nan")}, "finite and not negative"),
             ({"travel_agorot_per_km": float("inf")}, "finite and not negative"),
             ({"travel_agorot_per_km": "100"}, "must be a number"),
+            ({"penalty_agorot": 10**9}, "cannot exceed"),
+            ({"travel_agorot_per_km": 1e30}, "cannot exceed"),
         ],
     )
     def test_bad_values_are_rejected(self, fields, message):

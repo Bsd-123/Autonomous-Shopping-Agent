@@ -14,6 +14,10 @@ from typing import Self
 
 DEFAULT_PENALTY_AGOROT = 1_000  # F
 DEFAULT_TRAVEL_AGOROT_PER_KM = 100.0  # c
+# Far above any sensible value, and far below what int64 agorot can hold, so a typo
+# such as 1e30 is refused instead of overflowing into a negative travel cost.
+MAX_PENALTY_AGOROT = 10_000_000  # 100,000 shekels
+MAX_TRAVEL_AGOROT_PER_KM = 1_000_000.0  # 10,000 shekels
 PENALTY_VARIABLE = "SHOPPING_AGENT_STORE_PENALTY_AGOROT"
 TRAVEL_VARIABLE = "SHOPPING_AGENT_TRAVEL_AGOROT_PER_KM"
 
@@ -39,11 +43,17 @@ class DecisionConfig:
             raise ConfigError("the store penalty must be a whole number of agorot")
         if self.penalty_agorot < 0:
             raise ConfigError("the store penalty cannot be negative")
+        if self.penalty_agorot > MAX_PENALTY_AGOROT:
+            raise ConfigError(f"the store penalty cannot exceed {MAX_PENALTY_AGOROT} agorot")
         per_km = self.travel_agorot_per_km
         if isinstance(per_km, bool) or not isinstance(per_km, int | float):
             raise ConfigError("the travel cost per kilometre must be a number")
         if not isfinite(per_km) or per_km < 0:
             raise ConfigError("the travel cost per kilometre must be finite and not negative")
+        if per_km > MAX_TRAVEL_AGOROT_PER_KM:
+            raise ConfigError(
+                f"the travel cost per kilometre cannot exceed {MAX_TRAVEL_AGOROT_PER_KM:g} agorot"
+            )
 
     def penalty(self, store_count: int) -> int:
         """The penalty of a basket bought from ``store_count`` stores: ``F x (n - 1)``."""
